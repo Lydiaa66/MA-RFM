@@ -87,7 +87,7 @@ def detect(grad,X,Y,tau_x_min,tau_x_max,tau_y_min,tau_y_max,para,ax,fig):
 
 
 class MeshVisualizer:
-    def __init__(self, figsize=(42, 8)):
+    def __init__(self, figsize=(72, 8)):
         """
         网格可视化工具
         
@@ -150,7 +150,7 @@ class MeshVisualizer:
              x_min, x_max, y_min, y_max = -0.3, 0.3, -0.3, 0.3
 
         if temp==True:
-            fig, axes = plt.subplots(1, n_steps+1, figsize=(7* (n_steps+1), 6))
+            fig, axes = plt.subplots(1, n_steps+1, figsize=(8.8* (n_steps+1), 7.5))
         else:
             fig, axes = plt.subplots(1, n_steps, figsize=(5 * n_steps, 5))
         if n_steps == 1:
@@ -187,10 +187,10 @@ class MeshVisualizer:
                                             label='Boundary Layer')
             axes[i].add_patch(boundary_circle1)
             axes[i].add_patch(boundary_circle2)
-            axes[i].tick_params(axis='x', labelsize=24)
-            axes[i].tick_params(axis='y', labelsize=24)
+            axes[i].tick_params(axis='x', labelsize=28)
+            axes[i].tick_params(axis='y', labelsize=28)
             axes[i].set_xlabel("$x_1$", fontsize=38)
-            axes[i].set_ylabel("$x_2$", fontsize=38)
+            #axes[i].set_ylabel("$x_2$", fontsize=38)
         if temp and g_S is not None:
             tau_x_min,tau_x_max=x_min, x_max
             tau_y_min,tau_y_max=y_min, y_max
@@ -211,15 +211,52 @@ class MeshVisualizer:
 
             Bound_detect.detect_shape(g_S,X.T,Y.T,tau_x_min,tau_x_max,tau_y_min,tau_y_max,para_abs,para_grad,eps_cluster,mini_samples,
                                       S_num=S_for_detect,ax=axes[-1], fig=fig,
-                                      output_directory="./results_ada/noise=10%_grad", output_filename="plot.pdf")
-            axes[-1].tick_params(axis='x', labelsize=24)
-            axes[-1].tick_params(axis='y', labelsize=24)
+                                      output_directory="./Noise/noise=10%", output_filename="plot.pdf")
+            if axes[-1].collections:
+                mappable = axes[-1].collections[0]
+            else:
+                mappable = axes[-1].images[0]
+            cbar = fig.colorbar(mappable, ax=axes, orientation='vertical',
+                                fraction=0.025, pad=0.02)
+            cbar.ax.tick_params(labelsize=24)
+            cbar.set_label(r'$S^{(0)}$', fontsize=30)
+            
+            axes[-1].tick_params(axis='x', labelsize=28)
+            axes[-1].tick_params(axis='y', labelsize=28)
             axes[-1].set_xlabel("$x_1$", fontsize=39)
-            axes[-1].set_ylabel("$x_2$", fontsize=39)
+            #axes[-1].set_ylabel("$x_2$", fontsize=39)
             axes[-1].set_title("$\mathcal{Q}_{grad}$", fontsize=42)
+            x_range=(x_min, x_max)
+            y_range=(y_min, y_max)
+            axes[0].set_xlim(x_range[0], x_range[1])
+            axes[0].set_ylim(y_range[0], y_range[1])
+            n_ticks=5
+            x_labels = np.linspace(x_range[0], x_range[1], n_ticks)
+            y_labels = np.linspace(y_range[0], y_range[1], n_ticks)
 
-        if save_path:
-            plt.savefig(save_path, dpi=300, bbox_inches='tight')
+            x_labels = np.round(x_labels, decimals=2)
+            y_labels = np.round(y_labels, decimals=2)
+            axes[0].set_ylabel("$x_2$", fontsize=38)
+            axes[0].set_xticks(np.linspace(x_range[0], x_range[1], n_ticks))
+            axes[0].set_xticklabels(x_labels, rotation=0, fontsize=28)
+            axes[0].set_yticks(np.linspace(y_range[0], y_range[1], n_ticks))
+            axes[0].set_yticklabels(y_labels, fontsize=28)
+            
+            # ax.set_xlabel('$x_1$',fontsize=34)
+            #ax.set_ylabel('$x_2$',fontsize=34)
+            axes[0].set_aspect('equal')
+            axes[0].grid(True, linestyle=':', alpha=0.2)
+            # if label is None:
+            #     ax.set_xlim(x_range[0], x_range[1])
+            #     ax.set_ylim(y_range[0], y_range[1])
+            #     ax.set_xlabel("")
+            #     ax.set_ylabel("")
+            #     ax.set_xticks([])
+            #     ax.set_yticks([])
+            axes[0].tick_params(axis='both', which='major', labelsize=28)
+            axes[0].tick_params(axis='x', labelsize=28)
+            if save_path:
+                plt.savefig(save_path, dpi=300, bbox_inches='tight')
             print(f"Figure saved to: {save_path}")
 
         plt.show()
@@ -241,7 +278,7 @@ class MeshVisualizer:
                 contour = ax.tricontourf(p_np[:, 0], p_np[:, 1], s_np,
                                          levels=20, cmap='rainbow', alpha=0.9)
                 cbar = fig.colorbar(contour, ax=ax)
-                cbar.ax.tick_params(labelsize=18)
+                cbar.ax.tick_params(labelsize=28)
             else:
                 if s_np.size != p_np.shape[0]:
                     print(f"Warning: S_num shape {s_np.shape} mismatch with points {p_np.shape}, skipping contour")
@@ -259,8 +296,7 @@ class MeshVisualizer:
             )
             ax.add_patch(rect)
             
-        
-
+    
 
         ax.set_xlim(x_range[0], x_range[1])
         ax.set_ylim(y_range[0], y_range[1])
@@ -272,13 +308,13 @@ class MeshVisualizer:
         y_labels = np.round(y_labels, decimals=2)
         
         ax.set_xticks(np.linspace(x_range[0], x_range[1], n_ticks))
-        ax.set_xticklabels(x_labels, rotation=0, fontsize=22)
+        ax.set_xticklabels(x_labels, rotation=0, fontsize=28)
         
         ax.set_yticks(np.linspace(y_range[0], y_range[1], n_ticks))
-        ax.set_yticklabels(y_labels, fontsize=22)
-        
+        ax.set_yticklabels(y_labels, fontsize=28)
+        ax.set_yticks([])  # 隐藏y轴刻度    
         ax.set_xlabel('$x_1$',fontsize=38)
-        ax.set_ylabel('$x_2$',fontsize=38)
+        #ax.set_ylabel('$x_2$',fontsize=38)
         ax.set_aspect('equal')
         ax.grid(True, linestyle=':', alpha=0.2)
         if label is None:

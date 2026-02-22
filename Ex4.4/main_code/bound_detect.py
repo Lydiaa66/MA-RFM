@@ -168,7 +168,7 @@ def detect_shape(grad, X, Y, tau_x_min, tau_x_max, tau_y_min, tau_y_max,para_abs
     print("Number of detected clusters:", len(segmented_results))
 
     
-    plt.figure(figsize=(7, 6))
+    plt.figure(figsize=(8, 6))
     results = []
     
     all_s_vals = np.concatenate([cluster_info['S_vals'] for cluster_info in segmented_results])
@@ -285,7 +285,7 @@ def detect_shape(grad, X, Y, tau_x_min, tau_x_max, tau_y_min, tau_y_max,para_abs
                                                      angle=0, edgecolor='m', facecolor='none', linestyle='--')
             plt.gca().add_patch(ellipse)
     
-    cbar = plt.colorbar(sc, shrink=0.85)
+    cbar = plt.colorbar(sc, shrink=0.5)
     cbar.ax.tick_params(labelsize=18)
     cbar.set_label('S values', fontsize=18)
 

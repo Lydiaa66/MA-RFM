@@ -167,8 +167,7 @@ def detect_shape(grad, X, Y, tau_x_min, tau_x_max, tau_y_min, tau_y_max,para_abs
 
     print("Number of detected clusters:", len(segmented_results))
 
-    
-    plt.figure(figsize=(7, 6))
+    plt.figure(figsize=(8, 6))
     results = []
     
     all_s_vals = np.concatenate([cluster_info['S_vals'] for cluster_info in segmented_results])
@@ -272,7 +271,7 @@ def detect_shape(grad, X, Y, tau_x_min, tau_x_max, tau_y_min, tau_y_max,para_abs
                     marker='o', s=5, edgecolor='white', linewidth=0.5, vmin=s_min, vmax=s_max)
 
         if shape_type == "Circle":
-            circle = plt.Circle(center, final_params['radius'], color='r', fill=False, linestyle='--')
+            circle = plt.Circle(center, final_params['radius'], color='r', fill=False, linestyle='--',linewidth=1.5)
             plt.gca().add_patch(circle)
         elif shape_type == "Rectangle":
             rect = plt.Rectangle((center[0] - Lx/2, center[1] - Ly/2), Lx, Ly, 
@@ -282,7 +281,10 @@ def detect_shape(grad, X, Y, tau_x_min, tau_x_max, tau_y_min, tau_y_max,para_abs
             ellipse = plt.matplotlib.patches.Ellipse(center, 2*final_params['a'], 2*final_params['b'], 
                                                      angle=0, edgecolor='m', facecolor='none', linestyle='--')
             plt.gca().add_patch(ellipse)
-    
+        #用×画出中心点,加粗
+        plt.scatter(center[0], center[1], c='k', marker='x', s=100, linewidth=2)
+
+        
     cbar = plt.colorbar(sc, shrink=1, aspect=10)
     cbar.ax.tick_params(labelsize=18)
 
@@ -307,11 +309,6 @@ def detect_shape(grad, X, Y, tau_x_min, tau_x_max, tau_y_min, tau_y_max,para_abs
     ax.set_xlim(tau_x_min, tau_x_max)
     ax.set_ylim(tau_y_min, tau_y_max)
     ax.set_aspect('equal', adjustable='box')
-
-    plt.legend()
-    plt.tight_layout()
-    plt.show()
-
     if output_directory and not os.path.exists(output_directory):
         os.makedirs(output_directory)
         print(f"Created directory: {output_directory}")
@@ -319,7 +316,9 @@ def detect_shape(grad, X, Y, tau_x_min, tau_x_max, tau_y_min, tau_y_max,para_abs
         output_directory = "."
 
     full_output_path = os.path.join(output_directory, output_filename)
-    plt.savefig(full_output_path)
+    plt.savefig(full_output_path, dpi=300, bbox_inches='tight')
+    plt.legend()
+    plt.tight_layout()
+    plt.show()
 
-    
     return results
