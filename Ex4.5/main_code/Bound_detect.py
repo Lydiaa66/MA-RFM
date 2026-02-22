@@ -193,7 +193,7 @@ def detect_shape(grad, X, Y, tau_x_min, tau_x_max, tau_y_min, tau_y_max,para_abs
 
 
         boundary_points=detect_boundary(cluster_pts)
-        ax.plot(boundary_points[:, 0], boundary_points[:, 1], 'ko', markersize=1)
+        #ax.plot(boundary_points[:, 0], boundary_points[:, 1], 'ko', markersize=1)
         res_rect = dist_to_axis_aligned_rect(boundary_points, center, Lx, Ly)
         res_ellip = dist_to_axis_aligned_ellipsoid(boundary_points, center, Lx, Ly)
         
@@ -269,15 +269,15 @@ def detect_shape(grad, X, Y, tau_x_min, tau_x_max, tau_y_min, tau_y_max,para_abs
                      marker='o', s=5, edgecolor='white', linewidth=0.5, vmin=s_min, vmax=s_max)
 
         if shape_type == "Circle":
-            circle = plt.Circle(center, final_params['radius'], color='r', fill=False, linestyle='--')
+            circle = plt.Circle(center, final_params['radius'], color='r', fill=False, linestyle='--',linewidth=1.5)
             ax.add_patch(circle)
         elif shape_type == "Rectangle":
             rect = plt.Rectangle((center[0] - Lx/2, center[1] - Ly/2), Lx, Ly, 
-                                 linewidth=1, edgecolor='g', facecolor='none', linestyle='--')
+                                 linewidth=1.5, edgecolor='g', facecolor='none', linestyle='--')
             ax.add_patch(rect)
         elif shape_type == "Ellipsoid":
             ellipse = plt.matplotlib.patches.Ellipse(center, 2*final_params['a'], 2*final_params['b'], 
-                                                     angle=0, edgecolor='m', facecolor='none', linestyle='--')
+                                                     angle=0, edgecolor='m', facecolor='none', linestyle='--',linewidth=1.5)
             ax.add_patch(ellipse)
         print(f"  Center: ({center[0]:.3f}, {center[1]:.3f})")
         if shape_type == "Circle":
@@ -286,17 +286,19 @@ def detect_shape(grad, X, Y, tau_x_min, tau_x_max, tau_y_min, tau_y_max,para_abs
             print(f"    W: {final_params['W']:.3f}, H: {final_params['H']:.3f}")
         elif shape_type == "Ellipsoid":
             print(f"    a: {final_params['a']:.3f}, b: {final_params['b']:.3f}")
+        #用×标记中心点
+        ax.plot(center[0], center[1], 'kx', markersize=10, markeredgewidth=2)
         print(f"    Rect Residual: {res_rect:.4f}, Ellip Residual: {res_ellip:.4f}")
         print(f"    Aspect Ratio: {aspect_ratio:.3f}")
         print(f"    Curvature - Std: {curvature_stats['std']:.4f}, Mean: {curvature_stats['mean']:.4f}, Peak Ratio: {curvature_stats['peak_ratio']:.2f}")
-    cbar = fig.colorbar(sc, ax=ax, shrink=1)
-    cbar.ax.tick_params(labelsize=24)
-    cbar.set_label('S values', fontsize=30)
+    # cbar = fig.colorbar(sc, ax=ax, shrink=1)
+    # cbar.ax.tick_params(labelsize=24)
+    # cbar.set_label(r'$S^{(0)}$', fontsize=30)
 
     xlabel = "$x_1$"
     ylabel = "$x_2$"
     ax.set_xlabel(xlabel, fontsize=40)
-    ax.set_ylabel(ylabel, fontsize=40)
+    #ax.set_ylabel(ylabel, fontsize=40)
 
     n_ticks = 5
     
@@ -311,7 +313,7 @@ def detect_shape(grad, X, Y, tau_x_min, tau_x_max, tau_y_min, tau_y_max,para_abs
     
     ax.set_yticks(y_ticks_loc)
     ax.set_yticklabels(y_tick_labels, fontsize=18)
-    
+    ax.set_yticks([])  # 隐藏y轴刻度
     ax.set_xlim(tau_x_min, tau_x_max)
     ax.set_ylim(tau_y_min, tau_y_max)
     ax.set_aspect('equal', adjustable='box')
