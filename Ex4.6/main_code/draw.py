@@ -31,11 +31,11 @@ def draw(X, Y, data, output_directory=".", output_filename="plot.png"):
     contour_fill = plt.contourf(X, Y, data, levels=20, cmap='rainbow', alpha=1, vmin=np.nanmin(data), vmax=np.nanmax(data))
 
     cbar = plt.colorbar(contour_fill, shrink=1, aspect=10)
-    cbar.ax.tick_params(labelsize=16)
+    cbar.ax.tick_params(labelsize=20)
 
-    plt.xlabel(r'$x_1$', fontsize=26)
-    plt.ylabel(r'$x_2$', fontsize=26)
-    plt.tick_params(axis='both', which='major', labelsize=18)
+    plt.xlabel(r'$x_1$', fontsize=38)
+    plt.ylabel(r'$x_2$', fontsize=38)
+    plt.tick_params(axis='both', which='major', labelsize=20)
 
     plt.gca().set_facecolor('white')
 

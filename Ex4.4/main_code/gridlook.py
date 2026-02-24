@@ -174,7 +174,7 @@ class MeshVisualizer:
                     S_num = S_num_stores[i]
 
             self._plot_single_mesh(fig, axes[i], cells, S_num=None, points=points,label=label, x_range=(x_min, x_max), y_range=(y_min, y_max))
-            axes[i].set_title(f"Cell {i}",fontsize=40)
+            axes[i].set_title(f"$\mathcal{{C}}_{{{i}}}$",fontsize=40)
             boundary_circle1 = patches.Circle((-0.06, 0), 0.06,
                                             linewidth=2,
                                             edgecolor='r',

@@ -15,6 +15,74 @@ import os
 from sklearn.cluster import DBSCAN
 from scipy.ndimage import binary_erosion
 
+def map_index_to_domain(points,tau_x_min,tau_x_max,tau_y_min,tau_y_max,shape):
+    """
+    将索引点映射到定义域
+    :param points: 索引点数组，形状为 (n, 2)
+    :param tau_x_min: x 轴最小值
+    :param tau_x_max: x 轴最大值
+    :param tau_y_min: y 轴最小值
+    :param tau_y_max: y 轴最大值
+    :param shape: 数组形状 (height, width)
+    :return: 映射后的点数组
+    """
+    x_scale=(tau_x_max-tau_x_min)/shape[1] #x方向的缩放比例
+    y_scale=(tau_y_max-tau_y_min)/shape[0] #y方向的缩放比例
+    
+    #映射公式
+    mapped_points=np.zeros_like(points,dtype=float)
+    mapped_points[:,0] = tau_x_min + points[:,0]*x_scale #映射x坐标
+    mapped_points[:,1] = tau_y_min + points[:,1]*y_scale #映射y坐标
+    return mapped_points
+
+
+def boundary(grad,X,Y,tau_x_min,tau_x_max,tau_y_min,tau_y_max,para,rho,output_directory=".", output_filename="plot.png"):
+        # --- 保存图像 ---
+    if output_directory and not os.path.exists(output_directory):
+        os.makedirs(output_directory)
+        print(f"Created directory: {output_directory}")
+    elif not output_directory: # Handle case where output_directory might be empty or None
+        output_directory = "." # Default to current directory
+
+    # Construct the full path for the output file
+    full_output_path = os.path.join(output_directory, output_filename)
+    
+    shape=grad.shape[0]
+    mask=np.where(grad>np.max(grad)/para) #筛选点
+    
+    # 删除mask为0的地方
+    mask1=mask[0]
+    mask2=mask[1]
+    boolean=(mask[0]>=5) & (mask[0]<=shape-5)
+    mask=(mask1[boolean],mask2[boolean])
+
+    # 3. 可视化
+    plt.figure(figsize=(6, 6))  # 设置图像大小
+    
+    # 在大于指定值的位置添加标记
+    plt.scatter(mask[0], mask[1], color='red', marker='o', s=5,
+                edgecolor='white', linewidth=0.5)
+    
+    mask=np.array(mask).T
+    hull = ConvexHull(mask)
+    hull_points = mask[hull.vertices]
+    
+
+    try:
+        plt.savefig(full_output_path, dpi=300, bbox_inches='tight')
+        print(f"Plot saved as {full_output_path}")
+    except Exception as e:
+        print(f"Error saving plot to {full_output_path}: {e}")
+    # --- ------------ ---
+    plt.show()
+    mapped_hull_points = map_index_to_domain(mask, tau_x_min, tau_x_max, tau_y_min, tau_y_max, grad.shape)
+
+
+
+    return mapped_hull_points
+
+
+
 def detect_boundary(points):
     mask=points
     padding = 0.1

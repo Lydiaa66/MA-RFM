@@ -49,8 +49,8 @@ def set_axes_equal(ax):
     ax.set_ylim3d([mid_y - max_range, mid_y + max_range])
     ax.set_zlim3d([mid_z - max_range, mid_z + max_range])
 
-def detect_3d(grad, S_num, domain_min, domain_max, para_grad, para_abs, elev,azim,center,choose,
-              output_directory=".", output_filename="plot_3d.png"):
+def detect_3d(grad, S_num, domain_min, domain_max, para_grad, para_abs, elev,azim,center,choose,noaxis,
+              output_directory=".", output_filename="plot_3d.png",dpi=300):
     
     if output_directory and not os.path.exists(output_directory):
         os.makedirs(output_directory)
@@ -93,11 +93,11 @@ def detect_3d(grad, S_num, domain_min, domain_max, para_grad, para_abs, elev,azi
         ax.set_xlim([domain_min[0], domain_max[0]])
         ax.set_ylim([domain_min[1], domain_max[1]])
         ax.set_zlim([domain_min[2], domain_max[2]])
-        ax.tick_params(axis='both', which='major', labelsize=16)
-        ax.tick_params(axis='z', which='major', labelsize=16)
-        ax.set_xlabel("X", fontsize=14, labelpad=10)
-        ax.set_ylabel("Y", fontsize=14, labelpad=10)
-        ax.set_zlabel("Z", fontsize=14, labelpad=10)
+        ax.tick_params(axis='both', which='major', labelsize=18)
+
+        ax.set_xlabel("X", fontsize=18, labelpad=10)
+        ax.set_ylabel("Y", fontsize=18, labelpad=10)
+        ax.set_zlabel("Z", fontsize=18, labelpad=10)
         
         ax.view_init(elev=elev, azim=azim)
         offset = 0.05 
@@ -114,7 +114,7 @@ def detect_3d(grad, S_num, domain_min, domain_max, para_grad, para_abs, elev,azi
         ax.grid(True, linestyle='--', alpha=0.3)
 
         plt.tight_layout()
-        plt.savefig(full_output_path, dpi=300, bbox_inches='tight')
+        plt.savefig(full_output_path, dpi=dpi, bbox_inches='tight')
         plt.show()
     
     if choose=="S":
@@ -131,50 +131,71 @@ def detect_3d(grad, S_num, domain_min, domain_max, para_grad, para_abs, elev,azi
         ax.set_xlim([domain_min[0], domain_max[0]])
         ax.set_ylim([domain_min[1], domain_max[1]])
         ax.set_zlim([domain_min[2], domain_max[2]])
-        ax.tick_params(axis='both', which='major', labelsize=16,pad=6)
-        ax.tick_params(axis='x', which='major', labelsize=16,pad=6)
-
-        ax.set_xlabel("$x_1$", fontsize=25, labelpad=20)
+        ax.tick_params(axis='both', which='major', labelsize=18,pad=6)
+    
+        ax.set_xlabel("$x_1$", fontsize=25, labelpad=15)
         ax.set_ylabel("$x_2$", fontsize=25, labelpad=20)
         ax.set_zlabel("$x_3$", fontsize=25, labelpad=15)
+        if noaxis=="x1":
+            ax.tick_params(axis='x', which='major', labelsize=0,pad=6)
+            ax.set_xlabel("", fontsize=25, labelpad=15)
+            ax.set_zticks([tick for tick in ax.get_zticks() if tick != 0])
+            for i in range(len(center)):
+                center_point = center[i]
+                ax.scatter(center_point[0], center_point[1], center_point[2], color='black', s=100, marker='x', edgecolors='black', label='Center Point', zorder=200)
+                ax.text(center_point[0]+0.4, center_point[1]+0.4, center_point[2]-0.1, 
+                        f"${{\\boldsymbol{{c}}_{{{i+1}}}}}$:({center_point[0]:.2f}, {center_point[1]:.2f}, {center_point[2]:.2f})", 
+                        color='black', fontsize=16, fontweight='bold', ha='left', va='center', zorder=200)
+                ax.plot([center_point[0]+0.05, center_point[0]], 
+                        [center_point[1]+0.05, center_point[1]], 
+                        [center_point[2]-0.05, center_point[2]],
+                        color='black', linestyle='-', linewidth=2, zorder=200)
+        elif noaxis=="x2":
+            ax.tick_params(axis='y', which='major', labelsize=0,pad=6)
+            ax.set_ylabel("", fontsize=25, labelpad=20)
+            ax.set_zlim([domain_min[2], domain_max[2]])
+            ax.set_zticks([tick for tick in ax.get_zticks() if tick != 0])
+            ax.tick_params(axis='x', which='major', labelsize=18,pad=3)
+            ax.tick_params(axis='z', which='major', labelsize=18,pad=10)
+            ax.set_zlabel("$x_3$", fontsize=25, labelpad=20)
+            for i in range(len(center)):
+                center_point = center[i]
+                ax.scatter(center_point[0], center_point[1], center_point[2], color='black', s=100, marker='x', edgecolors='black', label='Center Point', zorder=200)
+                ax.text(center_point[0]+0.4, center_point[1]+0.4, center_point[2]-0.1, 
+                        f"${{\\boldsymbol{{c}}_{{{i+1}}}}}$:({center_point[0]:.2f}, {center_point[1]:.2f}, {center_point[2]:.2f})", 
+                        color='black', fontsize=16, fontweight='bold', ha='left', va='center', zorder=200)
+                ax.plot([center_point[0]+0.05, center_point[0]], 
+                        [center_point[1]+0.05, center_point[1]], 
+                        [center_point[2]-0.05, center_point[2]],
+                        color='black', linestyle='-', linewidth=2, zorder=200)
+        elif noaxis=="x3":
+            ax.tick_params(axis='z', which='major', labelsize=0,pad=6)
+            ax.set_zlabel("", fontsize=25, labelpad=0)
+            ax.set_xlabel("$x_1$", fontsize=25, labelpad=25)
+            ax.tick_params(axis='x', which='major', labelsize=18,pad=10)
+            ax.tick_params(axis='y', which='major', labelsize=18,pad=3)
+            ax.set_xticks([tick for tick in ax.get_zticks() if tick != 0])
+            for i in range(len(center)):
+                center_point = center[i]
+                ax.scatter(center_point[0], center_point[1], center_point[2], color='black', s=100, marker='x', edgecolors='black', label='Center Point', zorder=200)
+                ax.text(center_point[0]+0.1, center_point[1]+0.3, center_point[2]-0.1, 
+                        f"${{\\boldsymbol{{c}}_{{{i+1}}}}}$:({center_point[0]:.2f}, {center_point[1]:.2f}, {center_point[2]:.2f})", 
+                        color='black', fontsize=16, fontweight='bold', ha='left', va='center', zorder=200)
+                ax.plot([center_point[0]+0.05, center_point[0]], 
+                        [center_point[1]+0.05, center_point[1]], 
+                        [center_point[2]-0.05, center_point[2]],
+                        color='black', linestyle='-', linewidth=2, zorder=200)
         ax.set_box_aspect([1, 1, 1])
         ax.view_init(elev=elev, azim=azim)
         ax.dist = 10
         
-        offset = 0.05 
         ax.scatter(mapped_mask_points[:, 0], 
                 mapped_mask_points[:, 1], 
                 mapped_mask_points[:, 2],
                 c=colors_S, s=3, alpha=0.6, edgecolors='none')
         
-        min_idx_val = np.argmin(S_values)
-        max_idx_val = np.argmax(S_values)
-        
-        min_pos = mapped_mask_points[min_idx_val]
-        max_pos = mapped_mask_points[max_idx_val]
-        min_val_s = S_values[min_idx_val]
-        max_val_s = S_values[max_idx_val]
 
-        range_x = domain_max[0] - domain_min[0]
-        range_y = domain_max[1] - domain_min[1]
-        range_z = domain_max[2] - domain_min[2]
-        
-        offset_vec_max = np.array([-range_x*0.1, -range_y*0.4, range_z*0.1])
-        offset_vec_min = np.array([range_x*0.1, range_y*0.4, -range_z*0.1])
 
-        for i in range(len(center)):
-            center_point = center[i]
-            ax.scatter(center_point[0], center_point[1], center_point[2], color='black', s=100, marker='x', edgecolors='black', label='Center Point', zorder=200)
-            ax.text(center_point[0]+0.4, center_point[1]+0.4, center_point[2]-0.1, 
-                    f"${{\\boldsymbol{{c}}_{{{i+1}}}}}$:({center_point[0]:.2f}, {center_point[1]:.2f}, {center_point[2]:.2f})", 
-                    color='black', fontsize=16, fontweight='bold', ha='left', va='center', zorder=200)
-            ax.plot([center_point[0]+0.05, center_point[0]], 
-                    [center_point[1]+0.05, center_point[1]], 
-                    [center_point[2]-0.05, center_point[2]],
-                    color='black', linestyle='-', linewidth=2, zorder=200)
-        
-        
-                
 
         cmap = plt.get_cmap("rainbow")
         mappable = plt.cm.ScalarMappable(norm=norm, cmap=cmap)
@@ -185,6 +206,6 @@ def detect_3d(grad, S_num, domain_min, domain_max, para_grad, para_abs, elev,azi
         ax.grid(True, linestyle='--', alpha=0.3)
 
     
-        plt.savefig(full_output_path, dpi=300, bbox_inches='tight', pad_inches=0.05)
+        plt.savefig(full_output_path, dpi=dpi, bbox_inches='tight', pad_inches=0.05)
         plt.show()
     return  mapped_mask_points,min_x_point,max_x_point,min_y_point,max_y_point,min_z_point,max_z_point

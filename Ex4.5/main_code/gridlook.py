@@ -175,7 +175,7 @@ class MeshVisualizer:
                     S_num = S_num_stores[i]
 
             self._plot_single_mesh(fig, axes[i], cells, S_num=None, points=points,label=label, x_range=(x_min, x_max), y_range=(y_min, y_max))
-            axes[i].set_title(f"Cell {i}",fontsize=40)
+            axes[i].set_title(f"$\mathcal{{C}}_{{{i}}}$",fontsize=40)
             axes[i].tick_params(axis='x', labelsize=28)
             #axes[i].tick_params(axis='y', labelsize=28)
             boundary_circle = patches.Circle((0.71, 0.5), 0.2,
@@ -226,7 +226,7 @@ class MeshVisualizer:
             axes[-1].set_xlabel("$x_1$", fontsize=36)
             #axes[-1].set_ylabel("$x_2$", fontsize=36)
             #axes[-1].tick_params(axis='y', labelsize=28)
-            axes[-1].set_title("$\mathcal{Q}_{grad}$", fontsize=40)
+            axes[-1].set_title("$\mathcal{Q}$", fontsize=40)
         axes[0].set_ylabel("$x_2$", fontsize=36)
         x_range=(x_min, x_max)
         y_range=(y_min, y_max)

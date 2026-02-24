@@ -49,7 +49,7 @@ def set_axes_equal(ax):
     ax.set_ylim3d([mid_y - max_range, mid_y + max_range])
     ax.set_zlim3d([mid_z - max_range, mid_z + max_range])
 
-def detect_3d(grad, S_num, domain_min, domain_max, para_grad, para_abs, elev,azim,center,choose,
+def detect_3d(grad, S_num, domain_min, domain_max, para_grad, para_abs, elev,azim,center,choose,noaxis,
               output_directory=".", output_filename="plot_3d.png",dpi=None):
     
     if output_directory and not os.path.exists(output_directory):
@@ -137,9 +137,53 @@ def detect_3d(grad, S_num, domain_min, domain_max, para_grad, para_abs, elev,azi
 
         ax.set_xlabel("$x_1$", fontsize=25, labelpad=20)
         ax.set_ylabel("$x_2$", fontsize=25, labelpad=20)
-        ax.text( domain_max[0]+0.1, domain_min[1]-0.01 , domain_max[2]+0.05, "$x_3$", fontsize=25, ha='center')
+        ax.set_zlabel("$x_3$", fontsize=25, labelpad=15)
+        set_axes_equal(ax)
         ax.set_box_aspect([1, 1, 1])
         ax.view_init(elev=elev, azim=azim)
+        if noaxis=="x1":
+            ax.tick_params(axis='x', which='major', labelsize=0,pad=6)
+            ax.set_xlabel("", fontsize=25, labelpad=15)
+            for i in range(len(center)):
+                center_point = center[i]
+                ax.scatter(center_point[0], center_point[1], center_point[2], color='black', s=100, marker='x', edgecolors='black', label='Center Point', zorder=200)
+                
+                ax.text(center_point[0]+0.3, center_point[1]+0.34, center_point[2]-0.1, 
+                        f"${{\\boldsymbol{{c}}_{{{i+1}}}}}$:({center_point[0]:.2f}, {center_point[1]:.2f}, {center_point[2]:.2f})", 
+                        color='black', fontsize=16, fontweight='bold', ha='left', va='center', zorder=200)
+                ax.plot([center_point[0]+0.1, center_point[0]], 
+                        [center_point[1], center_point[1]], 
+                        [center_point[2]-0.05, center_point[2]],
+                        color='black', linestyle='-', linewidth=2, zorder=200)
+        elif noaxis=="x2":
+            for i in range(len(center)):
+                center_point = center[i]
+                ax.scatter(center_point[0], center_point[1], center_point[2], color='black', s=100, marker='x', edgecolors='black', label='Center Point', zorder=200)
+                ax.set_zlabel("", fontsize=0, labelpad=0)
+                ax.text( domain_max[0]+0.1, domain_min[1]-0.01 , domain_max[2]+0.05, "$x_3$", fontsize=25, ha='center')
+                ax.text(center_point[0]+0.3, center_point[1]-0.2, center_point[2]-0.1, 
+                        f"${{\\boldsymbol{{c}}_{{{i+1}}}}}$:({center_point[0]:.2f}, {center_point[1]:.2f}, {center_point[2]:.2f})", 
+                        color='black', fontsize=16, fontweight='bold', ha='left', va='center', zorder=200)
+                ax.plot([center_point[0]+0.1, center_point[0]], 
+                        [center_point[1], center_point[1]], 
+                        [center_point[2]-0.05, center_point[2]],
+                        color='black', linestyle='-', linewidth=2, zorder=200)
+        elif noaxis=="x3":
+            ax.tick_params(axis='z', which='major', labelsize=0,pad=6)
+            ax.set_zlabel("", fontsize=25, labelpad=15)
+            ax.set_xlabel("$x_1$", fontsize=25, labelpad=30)
+            ax.tick_params(axis='x', which='major', labelsize=18,pad=15)
+            ax.tick_params(axis='y', which='major', labelsize=18,pad=12)
+            for i in range(len(center)):
+                center_point = center[i]
+                ax.scatter(center_point[0], center_point[1], center_point[2], color='black', s=100, marker='x', edgecolors='black', label='Center Point', zorder=200)
+                ax.text(center_point[0]+0.15, center_point[1]-0.32, center_point[2]-0.1, 
+                        f"${{\\boldsymbol{{c}}_{{{i+1}}}}}$:({center_point[0]:.2f}, {center_point[1]:.2f}, {center_point[2]:.2f})", 
+                        color='black', fontsize=16, fontweight='bold', ha='left', va='center', zorder=200)
+                ax.plot([center_point[0]+0.1, center_point[0]], 
+                        [center_point[1], center_point[1]], 
+                        [center_point[2]-0.05, center_point[2]],
+                        color='black', linestyle='-', linewidth=2, zorder=200)
         ax.dist = 10
         
         offset = 0.05 
@@ -163,16 +207,7 @@ def detect_3d(grad, S_num, domain_min, domain_max, para_grad, para_abs, elev,azi
         offset_vec_max = np.array([-range_x*0.1, -range_y*0.4, range_z*0.1])
         offset_vec_min = np.array([range_x*0.1, range_y*0.4, -range_z*0.1])
 
-        for i in range(len(center)):
-            center_point = center[i]
-            ax.scatter(center_point[0], center_point[1], center_point[2], color='black', s=100, marker='x', edgecolors='black', label='Center Point', zorder=200)
-            ax.text(center_point[0]+0.3, center_point[1]-0.2, center_point[2]-0.1, 
-                    f"${{\\boldsymbol{{c}}_{{{i+1}}}}}$:({center_point[0]:.2f}, {center_point[1]:.2f}, {center_point[2]:.2f})", 
-                    color='black', fontsize=16, fontweight='bold', ha='left', va='center', zorder=200)
-            ax.plot([center_point[0]+0.1, center_point[0]], 
-                    [center_point[1], center_point[1]], 
-                    [center_point[2]-0.05, center_point[2]],
-                    color='black', linestyle='-', linewidth=2, zorder=200)
+
 
         cmap = plt.get_cmap("rainbow")
         mappable = plt.cm.ScalarMappable(norm=norm, cmap=cmap)

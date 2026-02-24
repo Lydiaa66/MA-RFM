@@ -118,10 +118,10 @@ class MeshVisualizer:
         ax.set_ylim(0, 1)
         ax.set_aspect('equal')
         ax.grid(True, linestyle=':', alpha=0.2)
-        ax.set_xlabel('$x_1$', fontsize=30)
-        ax.set_ylabel('$x_2$', fontsize=30)
-        ax.tick_params(axis='both', which='major', labelsize=18)
-        ax.legend(fontsize=16, loc='best')
+        ax.set_xlabel('$x_1$', fontsize=40)
+        ax.set_ylabel('$x_2$', fontsize=40)
+        ax.tick_params(axis='both', which='major', labelsize=22)
+        ax.legend(fontsize=22, loc='best')
         plt.tight_layout(rect=[0, 0, 1, 1])
         return fig
 
@@ -139,7 +139,7 @@ class MeshVisualizer:
                 contour = ax.tricontourf(p_np[:, 0], p_np[:, 1], s_np,
                                          levels=20, cmap='rainbow', alpha=0.9)
                 cbar = fig.colorbar(contour, ax=ax)
-                cbar.ax.tick_params(labelsize=18)
+                cbar.ax.tick_params(labelsize=22)
             else:
 
                 ax.text(0.5, 0.5, "Not enough points for contour plot", 
@@ -176,15 +176,15 @@ class MeshVisualizer:
                 linestyle='--',
                 label='True Boundary'
             )
-            ax.legend(fontsize=18)
+            ax.legend(fontsize=22)
 
         ax.set_xlim(0, 1)
         ax.set_ylim(0, 1)
         ax.set_aspect('equal')
         ax.grid(True, linestyle=':', alpha=0.2)
-        ax.set_xlabel('$x_1$',fontsize=30)
-        ax.set_ylabel('$x_2$',fontsize=30)
-        ax.tick_params(axis='both', which='major', labelsize=20)
+        ax.set_xlabel('$x_1$',fontsize=40)
+        ax.set_ylabel('$x_2$',fontsize=40)
+        ax.tick_params(axis='both', which='major', labelsize=22)
         plt.tight_layout(rect=[0, 0, 1, 1])
         return fig
 

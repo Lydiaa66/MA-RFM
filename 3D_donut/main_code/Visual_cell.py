@@ -2,7 +2,7 @@ import matplotlib.pyplot as plt
 import os
 from mpl_toolkits.mplot3d.art3d import Line3DCollection
 
-def visualize_3d_grid(cells, title="3D Adaptive Grid", views=[(0, 90), (90, 180), (0, 180)], alpha=0.9,
+def visualize_3d_grid(cells, title="3D Adaptive Grid", views=[(0, 90), (90, 180), (0, 180)], alpha=0.9,noaxis="x1",
                       output_directory=".", output_filename="grid_visualization.png"):
     """
     Visualizes the 3D grid cells as wireframes.
@@ -93,16 +93,41 @@ def visualize_3d_grid(cells, title="3D Adaptive Grid", views=[(0, 90), (90, 180)
 
     ax.set_xlabel(r'$x_1$', fontsize=25, labelpad=20)
     ax.set_ylabel(r'$x_2$', fontsize=25, labelpad=20)
-    ax.set_zlabel(r'$x_3$', fontsize=25, labelpad=20)
+    ax.set_zlabel(r'$x_3$', fontsize=25, labelpad=15)
+    if noaxis == "x1":
+        ax.tick_params(axis='x', which='major', labelsize=0,pad=6)
+        ax.set_xlabel("", fontsize=25, labelpad=15)
+        sm = plt.cm.ScalarMappable(cmap=cmap, norm=plt.Normalize(vmin=min_level, vmax=max_level))
+        sm.set_array([])
+
+        cbar = plt.colorbar(sm, ax=ax, shrink=0.55, pad=0.01)
+        cbar.ax.tick_params(labelsize=20)
+    elif noaxis == "x2":
+        ax.set_zlabel("", fontsize=0, labelpad=0)
+        ax.text( 0.5+0.1, -0.5-0.01 , 0.5+0.05, "$x_3$", fontsize=25, ha='center')
+        sm = plt.cm.ScalarMappable(cmap=cmap, norm=plt.Normalize(vmin=min_level, vmax=max_level))
+        sm.set_array([])
+            
+        cbar = plt.colorbar(sm, ax=ax, shrink=0.5, pad=0.01)
+        cbar.ax.tick_params(labelsize=20)
+    elif noaxis == "x3":
+        ax.tick_params(axis='z', which='major', labelsize=0,pad=6)
+        ax.set_zlabel("", fontsize=25, labelpad=15)
+        ax.set_xlabel("$x_1$", fontsize=25, labelpad=30)
+        ax.tick_params(axis='x', which='major', labelsize=18,pad=15)
+        ax.tick_params(axis='y', which='major', labelsize=18,pad=12)
+        sm = plt.cm.ScalarMappable(cmap=cmap, norm=plt.Normalize(vmin=min_level, vmax=max_level))
+        sm.set_array([])
+
+        cbar = plt.colorbar(sm, ax=ax, shrink=0.51, pad=0.01)
+        cbar.ax.tick_params(labelsize=20)
     #ax.text( -0.5+0.1, 0.5+0.05 , 0.5+0.05, "$x_3$", fontsize=25, ha='center')
     ax.set_box_aspect([1, 1, 1])
     ax.view_init(elev=elev, azim=azim)
     ax.dist = 10
-    
-    sm = plt.cm.ScalarMappable(cmap=cmap, norm=plt.Normalize(vmin=min_level, vmax=max_level))
-    sm.set_array([])
-    cbar = plt.colorbar(sm, ax=ax, shrink=0.5, pad=0.01)
-    cbar.ax.tick_params(labelsize=20)
+    current_alpha = 1.0
+    #ax.set_proj_type('ortho')
+
     try:
          cbar.set_ticks(range(min_level, max_level + 1))
     except:
