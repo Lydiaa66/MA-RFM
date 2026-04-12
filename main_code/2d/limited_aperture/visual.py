@@ -2,19 +2,41 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 import numpy as np
 from matplotlib.colors import LinearSegmentedColormap
+import seaborn as sns
+
+
+def improved_plot(data, title, x_min, x_max, y_min, y_max, xlabel="x1", ylabel="x2", cmap="plasma", n_ticks=5):
+    plt.figure(figsize=(3, 3), dpi=120)
+    ax = sns.heatmap(data.T, cmap=cmap, cbar_kws={"shrink": 0.8}, cbar=False)
+    plt.gca().invert_yaxis()
+
+    plt.xlabel(xlabel, fontsize=14)
+    plt.ylabel(ylabel, fontsize=14)
+
+    x_labels = np.round(np.linspace(x_min, x_max, n_ticks), decimals=2)
+    y_labels = np.round(np.linspace(y_min, y_max, n_ticks), decimals=2)
+    plt.xticks(ticks=np.linspace(0, data.shape[0], n_ticks), labels=x_labels, rotation=0, fontsize=10)
+    plt.yticks(ticks=np.linspace(0, data.shape[1], n_ticks), labels=y_labels, fontsize=10)
+
+    plt.title(title, fontsize=16, pad=15)
+    plt.colorbar(ax.collections[0], label="Error Magnitude")
+    plt.gca().set_aspect("equal", adjustable="box")
+    plt.tight_layout()
+    plt.show()
+
 
 class MeshVisualizer:
     def __init__(self, figsize=(18, 8)):
         """
-        网格可视化工具
+        Mesh visualization utility.
         
         Args:
-            figsize: 图形大小
+            figsize: Figure size.
         """
         self.figsize = figsize
         
     def collect_leaf_cells(self, cells):
-        """递归收集所有叶子节点"""
+        """Recursively collect all leaf cells."""
         leaf_cells = []
         for cell in cells:
             if not cell.children:
@@ -26,13 +48,13 @@ class MeshVisualizer:
     def plot_mesh_comparison(self, initial_cells, refined_cells, 
                            cell_indicators=None, save_path=None):
         """
-        绘制细分前后的网格对比图
+        Plot the mesh before and after refinement.
         
         Args:
-            initial_cells: 初始网格列表
-            refined_cells: 细分后的网格列表  
-            cell_indicators: 网格指示器值字典（用于颜色映射）
-            save_path: 保存路径
+            initial_cells: Initial mesh-cell list.
+            refined_cells: Refined mesh-cell list.
+            cell_indicators: Mesh indicator dictionary used for color mapping.
+            save_path: Output path.
         """
         fig, (ax1, ax2) = plt.subplots(1, 2, figsize=self.figsize)
         
@@ -59,7 +81,7 @@ class MeshVisualizer:
         return fig
     
     def _plot_single_mesh(self, ax, cells, title, cell_indicators=None):
-        """绘制单个网格"""
+        """Plot a single mesh."""
         leaf_cells = self.collect_leaf_cells(cells)
         all_levels = []
         for cell in leaf_cells:
@@ -118,14 +140,14 @@ class MeshVisualizer:
     def plot_solution_and_mesh(self, cells, all_points, S_num, grad_S_num, 
                               save_path=None):
         """
-        绘制数值解、梯度和网格的组合图
+        Plot the numerical solution, gradient, and mesh together.
         
         Args:
-            cells: 网格列表
-            all_points: 所有高斯点坐标
-            S_num: 数值解
-            grad_S_num: 梯度
-            save_path: 保存路径
+            cells: Mesh-cell list.
+            all_points: Coordinates of all Gauss points.
+            S_num: Numerical solution.
+            grad_S_num: Gradient.
+            save_path: Output path.
         """
         fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
         
@@ -182,11 +204,11 @@ class MeshVisualizer:
     
     def plot_refinement_history(self, refinement_stats, save_path=None):
         """
-        绘制细分历史统计图
+        Plot refinement-history statistics.
         
         Args:
-            refinement_stats: 细分统计信息
-            save_path: 保存路径
+            refinement_stats: Refinement statistics.
+            save_path: Output path.
         """
         if not refinement_stats['history']:
             print("No refinement history data available")
@@ -239,13 +261,13 @@ class MeshVisualizer:
     def create_detailed_mesh_plot(self, cells, cell_indicators=None, 
                                  gauss_points=None, save_path=None):
         """
-        创建详细的网格图，包含高斯点
+        Create a detailed mesh plot including Gauss points.
         
         Args:
-            cells: 网格列表
-            cell_indicators: 指示器值
-            gauss_points: 高斯点坐标
-            save_path: 保存路径
+            cells: Mesh-cell list.
+            cell_indicators: Indicator values.
+            gauss_points: Coordinates of Gauss points.
+            save_path: Output path.
         """
         fig, ax = plt.subplots(1, 1, figsize=(10, 10))
         
@@ -300,16 +322,16 @@ class MeshVisualizer:
 def visualize_adaptive_refinement(cells, refined_cells, all_g_p, S_num, grad_S_num, 
                                  refinement_stats, cell_indicators=None):
     """
-    完整的自适应细分可视化
+    Complete visualization for adaptive refinement.
     
     Args:
-        cells: 初始网格
-        refined_cells: 细分后网格  
-        all_g_p: 高斯点
-        S_num: 数值解
-        grad_S_num: 梯度
-        refinement_stats: 细分统计
-        cell_indicators: 指示器值
+        cells: Initial mesh.
+        refined_cells: Refined mesh.
+        all_g_p: Gauss points.
+        S_num: Numerical solution.
+        grad_S_num: Gradient.
+        refinement_stats: Refinement statistics.
+        cell_indicators: Indicator values.
     """
     visualizer = MeshVisualizer()
     
@@ -324,15 +346,15 @@ def visualize_adaptive_refinement(cells, refined_cells, all_g_p, S_num, grad_S_n
     print("All visualizations completed!")
 
 """
-# 在你的自适应细分完成后添加：
-print("开始可视化...")
+# Add this after adaptive refinement is completed:
+print("Starting visualization...")
 visualize_adaptive_refinement(
-    cells=cells,                    # 初始网格
-    refined_cells=refined_cells,    # 细分后网格
-    all_g_p=all_g_p,              # 高斯点
-    S_num=S_num,                   # 数值解
-    grad_S_num=grad_S_num,         # 梯度
-    refinement_stats=refinement_stats,  # 细分统计
-    cell_indicators=amr.compute_cell_indicators(...)  # 指示器值
+    cells=cells,                    # Initial mesh
+    refined_cells=refined_cells,    # Refined mesh
+    all_g_p=all_g_p,                # Gauss points
+    S_num=S_num,                    # Numerical solution
+    grad_S_num=grad_S_num,          # Gradient
+    refinement_stats=refinement_stats,  # Refinement statistics
+    cell_indicators=amr.compute_cell_indicators(...)  # Indicator values
 )
 """

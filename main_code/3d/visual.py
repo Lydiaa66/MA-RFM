@@ -1,20 +1,23 @@
+import os
+
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 import numpy as np
 from matplotlib.colors import LinearSegmentedColormap
+from mpl_toolkits.mplot3d.art3d import Line3DCollection
 
 class MeshVisualizer3D:
     def __init__(self, figsize=(18, 8)):
         """
-        网格可视化工具
+        Mesh visualization utility.
         
         Args:
-            figsize: 图形大小
+            figsize: Figure size.
         """
         self.figsize = figsize
         
     def collect_leaf_cells(self, cells):
-        """递归收集所有叶子节点"""
+        """Recursively collect all leaf cells."""
         leaf_cells = []
         for cell in cells:
             if not cell.children:
@@ -26,13 +29,13 @@ class MeshVisualizer3D:
     def plot_mesh_comparison(self, initial_cells, refined_cells, 
                            cell_indicators=None, save_path=None):
         """
-        绘制细分前后的网格对比图
+        Plot the mesh before and after refinement.
         
         Args:
-            initial_cells: 初始网格列表
-            refined_cells: 细分后的网格列表  
-            cell_indicators: 网格指示器值字典（用于颜色映射）
-            save_path: 保存路径
+            initial_cells: Initial mesh-cell list.
+            refined_cells: Refined mesh-cell list.
+            cell_indicators: Mesh indicator dictionary used for color mapping.
+            save_path: Output path.
         """
         fig, (ax1, ax2) = plt.subplots(1, 2, figsize=self.figsize)
         
@@ -59,7 +62,7 @@ class MeshVisualizer3D:
         return fig
     
     def _plot_single_mesh(self, ax, cells, title, cell_indicators=None):
-        """绘制单个网格"""
+        """Plot a single mesh."""
         leaf_cells = self.collect_leaf_cells(cells)
         all_levels = []
         for cell in leaf_cells:
@@ -130,14 +133,14 @@ class MeshVisualizer3D:
     def plot_solution_and_mesh(self, cells, all_points, S_num, grad_S_num, 
                               save_path=None):
         """
-        绘制数值解、梯度和网格的组合图
+        Plot the numerical solution, gradient, and mesh together.
         
         Args:
-            cells: 网格列表
-            all_points: 所有高斯点坐标
-            S_num: 数值解
-            grad_S_num: 梯度
-            save_path: 保存路径
+            cells: Mesh-cell list.
+            all_points: Coordinates of all Gauss points.
+            S_num: Numerical solution.
+            grad_S_num: Gradient.
+            save_path: Output path.
         """
         fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
         
@@ -194,11 +197,11 @@ class MeshVisualizer3D:
     
     def plot_refinement_history(self, refinement_stats, save_path=None):
         """
-        绘制细分历史统计图
+        Plot refinement-history statistics.
         
         Args:
-            refinement_stats: 细分统计信息
-            save_path: 保存路径
+            refinement_stats: Refinement statistics.
+            save_path: Output path.
         """
         if not refinement_stats['history']:
             print("No refinement history data available")
@@ -251,13 +254,13 @@ class MeshVisualizer3D:
     def create_detailed_mesh_plot(self, cells, cell_indicators=None, 
                                  gauss_points=None, save_path=None):
         """
-        创建详细的网格图，包含高斯点
+        Create a detailed mesh plot including Gauss points.
         
         Args:
-            cells: 网格列表
-            cell_indicators: 指示器值
-            gauss_points: 高斯点坐标
-            save_path: 保存路径
+            cells: Mesh-cell list.
+            cell_indicators: Indicator values.
+            gauss_points: Coordinates of Gauss points.
+            save_path: Output path.
         """
         fig, ax = plt.subplots(1, 1, figsize=(10, 10))
         
@@ -312,39 +315,869 @@ class MeshVisualizer3D:
 def visualize_adaptive_refinement(cells, refined_cells, all_g_p, S_num, grad_S_num, 
                                  refinement_stats, cell_indicators=None):
     """
-    完整的自适应细分可视化
+    Complete visualization for adaptive refinement.
     
     Args:
-        cells: 初始网格
-        refined_cells: 细分后网格  
-        all_g_p: 高斯点
-        S_num: 数值解
-        grad_S_num: 梯度
-        refinement_stats: 细分统计
-        cell_indicators: 指示器值
+        cells: Initial mesh.
+        refined_cells: Refined mesh.
+        all_g_p: Gauss points.
+        S_num: Numerical solution.
+        grad_S_num: Gradient.
+        refinement_stats: Refinement statistics.
+        cell_indicators: Indicator values.
     """
-    visualizer = MeshVisualizer()
+    visualizer = MeshVisualizer3D()
     
     print("Generating visualizations...")
     
-    print("1. Plotting mesh comparison...")
-    visualizer.plot_mesh_comparison(cells, refined_cells, cell_indicators)
+    initial_count = len(visualizer.collect_leaf_cells(cells))
+    refined_count = len(visualizer.collect_leaf_cells(refined_cells))
+
+    print("1. Plotting refined mesh (3 views)...")
+    print(
+        f"   cells: {initial_count} -> {refined_count} "
+        f"(added {refined_count - initial_count})"
+    )
+    visualize_3d_grid(
+        refined_cells,
+        title="Refined Mesh",
+        views=[(0, 90), (90, 180), (0, 180)],
+        output_directory=".",
+        output_filename=None,
+    )
     
     
     
     
     print("All visualizations completed!")
 
+
+MeshVisualizer = MeshVisualizer3D
+
+
+def draw(
+    X,
+    Y,
+    data,
+    data_1D,
+    x_label,
+    y_label,
+    xx,
+    output_directory=".",
+    output_filename1="plot.png",
+    output_filename2="plot_1d.png",
+    temp_point=False,
+    temp_v=False,
+):
+    if output_directory and not os.path.exists(output_directory):
+        os.makedirs(output_directory)
+    elif not output_directory:
+        output_directory = "."
+
+    full_output_path1 = os.path.join(output_directory, output_filename1)
+    full_output_path2 = os.path.join(output_directory, output_filename2)
+
+    data = np.asarray(data)
+    plt.figure(figsize=(8, 6))
+    contour_fill = plt.contourf(
+        X,
+        Y,
+        data,
+        levels=20,
+        cmap="rainbow",
+        alpha=1,
+        vmin=np.nanmin(data),
+        vmax=np.nanmax(data),
+    )
+    cbar = plt.colorbar(contour_fill, shrink=1, aspect=10)
+    cbar.ax.tick_params(labelsize=16)
+    plt.xlabel(x_label, fontsize=30)
+    plt.ylabel(y_label, fontsize=30)
+    plt.tick_params(axis="both", which="major", labelsize=18)
+    plt.gca().set_facecolor("white")
+
+    if temp_point:
+        max_idx = np.nanargmax(data)
+        min_idx = np.nanargmin(data)
+        x_max = X.flat[max_idx]
+        y_max = Y.flat[max_idx]
+        x_min = X.flat[min_idx]
+        y_min = Y.flat[min_idx]
+        dx = 0.05 * (X.max() - X.min())
+        dy = 0.05 * (Y.max() - Y.min())
+
+        plt.plot(x_max, y_max, "ro", markersize=6)
+        plt.annotate(
+            f"Max:({x_max:.2f}, {y_max:.2f})",
+            xy=(x_max, y_max),
+            xycoords="data",
+            xytext=(x_max + dx, y_max + dy),
+            textcoords="data",
+            arrowprops=dict(arrowstyle="->", color="black", lw=1.5),
+            fontsize=12,
+            color="black",
+            weight="bold",
+            ha="left",
+            va="bottom",
+        )
+
+        plt.plot(x_min, y_min, "bo", markersize=6)
+        plt.annotate(
+            f"Min:({x_min:.2f}, {y_min:.2f})",
+            xy=(x_min, y_min),
+            xycoords="data",
+            xytext=(x_min - dx, y_min - dy),
+            textcoords="data",
+            arrowprops=dict(arrowstyle="->", color="black", lw=1.5),
+            fontsize=12,
+            color="black",
+            weight="bold",
+            ha="right",
+            va="top",
+        )
+
+    plt.tight_layout()
+    plt.savefig(full_output_path1, dpi=300, bbox_inches="tight")
+    print(f"Plot saved as {full_output_path1}")
+
+    if temp_v and len(np.asarray(data_1D).shape) > 0 and np.asarray(data_1D).size > 0:
+        data_1D = np.asarray(data_1D).reshape(-1)
+        x_divide = np.linspace(0, 1, len(data_1D))
+        max_abs_idx = np.argmax(np.abs(data_1D))
+        half_max = data_1D[max_abs_idx] / 2
+        half_max_indices = np.where(
+            (data_1D >= half_max - 10 ** (-2.2)) & (data_1D <= half_max + 10 ** (-2.2))
+        )[0]
+
+        plt.figure(figsize=(5, 3), dpi=120)
+        plt.plot(
+            range(int(data.shape[0])),
+            data_1D,
+            linestyle="-",
+            color="blue",
+            label="1D slice",
+        )
+        plt.axhline(y=half_max, color="black", linestyle="--", label="1/2 Maximum Value")
+        plt.plot(
+            [0, -0.015],
+            [half_max, half_max],
+            color="black",
+            linewidth=1,
+            transform=plt.gca().get_yaxis_transform(),
+            clip_on=False,
+        )
+        plt.text(
+            -0.02,
+            half_max,
+            f"{half_max:.2f}",
+            color="black",
+            fontsize=14,
+            va="center",
+            ha="right",
+            transform=plt.gca().get_yaxis_transform(),
+        )
+        ax = plt.gca()
+        for i, idx in enumerate(half_max_indices):
+            plt.axvline(x=idx, color="red", linestyle="--", linewidth=1)
+            x_val = x_divide[idx]
+            y_pos = 0.02 if len(half_max_indices) <= 2 or i % 2 == 0 else 0.08
+            ax.text(
+                idx,
+                y_pos,
+                f"{xx}={x_val:.2f}",
+                color="red",
+                fontsize=12,
+                rotation=0,
+                va="bottom",
+                ha="center",
+                transform=ax.get_xaxis_transform(),
+                weight="bold",
+            )
+
+        plt.xlabel(xx, fontsize=20)
+        plt.tick_params(axis="y", labelsize=14)
+        n_ticks = 7
+        x_labels = np.round(np.linspace(np.min(X), np.max(X), n_ticks), decimals=2)
+        plt.xticks(
+            ticks=np.linspace(0, data.shape[1] - 1, n_ticks),
+            labels=x_labels,
+            rotation=0,
+            fontsize=14,
+        )
+        plt.savefig(full_output_path2, dpi=300, bbox_inches="tight")
+        print(f"Plot saved as {full_output_path2}")
+
+    plt.show()
+    plt.close("all")
+
+
+def visualize_3d_grid(
+    cells,
+    title="3D Adaptive Grid",
+    views=None,
+    alpha=0.9,
+    noaxis=None,
+    output_directory=".",
+    output_filename=None,
+):
+    if views is None:
+        views = [(0, 90), (90, 180), (0, 180)]
+
+    full_output_path = None
+    if output_filename:
+        if output_directory and not os.path.exists(output_directory):
+            os.makedirs(output_directory)
+        elif not output_directory:
+            output_directory = "."
+        full_output_path = os.path.join(output_directory, output_filename)
+
+    if not cells:
+        print("No cells to visualize.")
+        return
+
+    visualizer = MeshVisualizer3D()
+    leaf_cells = visualizer.collect_leaf_cells(cells)
+    if not leaf_cells:
+        print("No leaf cells to visualize.")
+        return
+
+    segments = []
+    colors = []
+
+    levels = [c.level for c in leaf_cells]
+    min_level = min(levels) if levels else 0
+    max_level = max(levels) if levels else 1
+    cmap = plt.get_cmap("jet", max_level - min_level + 1)
+
+    print(f"Plotting {len(leaf_cells)} cells. Levels: {min_level} to {max_level}")
+
+    for cell in leaf_cells:
+        x, y, z = cell.x0, cell.y0, cell.z0
+        s = cell.size
+        lvl = cell.level
+        c = cmap((lvl - min_level) / (max_level - min_level + 1e-6))
+
+        if lvl == min_level:
+            current_alpha = 0.05
+        elif lvl == min_level + 1:
+            current_alpha = 0.2
+        else:
+            current_alpha = alpha
+
+        cell_segments = [
+            [(x, y, z), (x + s, y, z)],
+            [(x + s, y, z), (x + s, y + s, z)],
+            [(x + s, y + s, z), (x, y + s, z)],
+            [(x, y + s, z), (x, y, z)],
+            [(x, y, z + s), (x + s, y, z + s)],
+            [(x + s, y, z + s), (x + s, y + s, z + s)],
+            [(x + s, y + s, z + s), (x, y + s, z + s)],
+            [(x, y + s, z + s), (x, y, z + s)],
+            [(x, y, z), (x, y, z + s)],
+            [(x + s, y, z), (x + s, y, z + s)],
+            [(x + s, y + s, z), (x + s, y + s, z + s)],
+            [(x, y + s, z), (x, y, z + s)],
+        ]
+        segments.extend(cell_segments)
+        c_rgba = list(c)
+        c_rgba[3] = current_alpha
+        colors.extend([c_rgba] * 12)
+
+    all_x = [c.x0 for c in leaf_cells] + [c.x0 + c.size for c in leaf_cells]
+    all_y = [c.y0 for c in leaf_cells] + [c.y0 + c.size for c in leaf_cells]
+    all_z = [c.z0 for c in leaf_cells] + [c.z0 + c.size for c in leaf_cells]
+    xlims = (min(all_x), max(all_x))
+    ylims = (min(all_y), max(all_y))
+    zlims = (min(all_z), max(all_z))
+
+    sm = plt.cm.ScalarMappable(cmap=cmap, norm=plt.Normalize(vmin=min_level, vmax=max_level))
+    sm.set_array([])
+
+    if isinstance(noaxis, (list, tuple)):
+        axis_modes = list(noaxis)
+    elif noaxis is None:
+        axis_modes = [None] * len(views)
+    else:
+        axis_modes = [noaxis] * len(views)
+
+    def _plot_axis(ax, elev, azim, axis_mode=None, single_view=False):
+        lc = Line3DCollection(segments, colors=colors, linewidths=0.5)
+        ax.add_collection3d(lc)
+        ax.set_xlim(xlims)
+        ax.set_ylim(ylims)
+        ax.set_zlim(zlims)
+
+        if single_view:
+            ax.tick_params(axis="both", which="major", labelsize=16, pad=6)
+            ax.tick_params(axis="x", which="major", labelsize=16, pad=6)
+            ax.set_xlabel(r"$x_1$", fontsize=25, labelpad=20)
+            ax.set_ylabel(r"$x_2$", fontsize=25, labelpad=20)
+            ax.set_zlabel(r"$x_3$", fontsize=25, labelpad=15)
+        else:
+            ax.tick_params(axis="both", which="major", labelsize=12, pad=3)
+            ax.set_xlabel(r"$x_1$", fontsize=17, labelpad=8)
+            ax.set_ylabel(r"$x_2$", fontsize=17, labelpad=9)
+            ax.set_zlabel(r"$x_3$", fontsize=17, labelpad=6)
+
+        if axis_mode == "x1":
+            ax.tick_params(axis="x", which="major", labelsize=0, pad=6)
+            ax.set_xlabel("", fontsize=25 if single_view else 17, labelpad=15)
+        elif axis_mode == "x2":
+            ax.tick_params(axis="y", which="major", labelsize=0, pad=6)
+            ax.set_ylabel("", fontsize=25 if single_view else 17, labelpad=15)
+        elif axis_mode == "x3":
+            ax.tick_params(axis="z", which="major", labelsize=0, pad=6)
+            ax.set_zlabel("", fontsize=25 if single_view else 17, labelpad=15)
+
+        ax.set_box_aspect([1, 1, 1])
+        ax.view_init(elev=elev, azim=azim)
+        ax.grid(True, linestyle=":", alpha=0.2)
+        try:
+            ax.dist = 10
+        except Exception:
+            pass
+
+    if len(views) == 1:
+        fig = plt.figure(figsize=(10, 10))
+        elev, azim = views[0] if views else (30, -60)
+        ax = fig.add_subplot(1, 1, 1, projection="3d")
+        ax.set_position([0.01, 0.02, 0.75, 0.96])
+        _plot_axis(ax, elev, azim, axis_modes[0] if axis_modes else None, single_view=True)
+        cbar = plt.colorbar(sm, ax=ax, shrink=0.5, pad=0.01)
+    else:
+        fig = plt.figure(figsize=(6.5 * len(views), 6))
+        axes = []
+        for idx, (elev, azim) in enumerate(views):
+            ax = fig.add_subplot(1, len(views), idx + 1, projection="3d")
+            axis_mode = axis_modes[idx] if idx < len(axis_modes) else None
+            _plot_axis(ax, elev, azim, axis_mode, single_view=False)
+            ax.set_title(f"View {idx + 1}", fontsize=16)
+            axes.append(ax)
+        fig.subplots_adjust(left=0.02, right=0.88, bottom=0.02, top=0.90, wspace=0.02)
+        cax = fig.add_axes([0.92, 0.20, 0.012, 0.58])
+        cbar = fig.colorbar(sm, cax=cax)
+
+    cbar.ax.tick_params(labelsize=20)
+    try:
+        cbar.set_ticks(range(min_level, max_level + 1))
+    except Exception:
+        pass
+
+    if full_output_path:
+        plt.savefig(full_output_path, dpi=300, bbox_inches="tight", pad_inches=0.05)
+    plt.show()
+
 """
-# 在你的自适应细分完成后添加：
-print("开始可视化...")
+# Add this after adaptive refinement is completed:
+print("Starting visualization...")
 visualize_adaptive_refinement(
-    cells=cells,                    # 初始网格
-    refined_cells=refined_cells,    # 细分后网格
-    all_g_p=all_g_p,              # 高斯点
-    S_num=S_num,                   # 数值解
-    grad_S_num=grad_S_num,         # 梯度
-    refinement_stats=refinement_stats,  # 细分统计
-    cell_indicators=amr.compute_cell_indicators(...)  # 指示器值
+    cells=cells,                    # Initial mesh
+    refined_cells=refined_cells,    # Refined mesh
+    all_g_p=all_g_p,                # Gauss points
+    S_num=S_num,                    # Numerical solution
+    grad_S_num=grad_S_num,          # Gradient
+    refinement_stats=refinement_stats,  # Refinement statistics
+    cell_indicators=amr.compute_cell_indicators(...)  # Indicator values
 )
 """
+
+# Q-filter visualizations migrated from q_filter.py.
+def map_index_to_domain_3d(points, domain_min, domain_max, shape):
+    """
+    Map 3D index points to the physical domain.
+    :param points: Index-point array with shape (n, 3).
+    :param domain_min: Coordinate-wise lower bound (x_min, y_min, z_min).
+    :param domain_max: Coordinate-wise upper bound (x_max, y_max, z_max).
+    :param shape: 3D array shape (depth, height, width).
+    :return: Mapped point array.
+    """
+    scales = (np.array(domain_max) - np.array(domain_min)) / (np.array(shape) - 1)
+
+    mapped_points = np.zeros_like(points, dtype=float)
+    mapped_points[:, 0] = domain_min[0] + points[:, 0] * scales[0]
+    mapped_points[:, 1] = domain_min[1] + points[:, 1] * scales[1]
+    mapped_points[:, 2] = domain_min[2] + points[:, 2] * scales[2]
+    return mapped_points
+
+
+def set_axes_equal(ax):
+    """Use equal tick spacing for the x, y, and z axes in a 3D plot."""
+    x_limits = ax.get_xlim3d()
+    y_limits = ax.get_ylim3d()
+    z_limits = ax.get_zlim3d()
+
+    x_range = abs(x_limits[1] - x_limits[0])
+    y_range = abs(y_limits[1] - y_limits[0])
+    z_range = abs(z_limits[1] - z_limits[0])
+
+    max_range = max([x_range, y_range, z_range]) / 2.0
+
+    mid_x = (x_limits[0] + x_limits[1]) / 2
+    mid_y = (y_limits[0] + y_limits[1]) / 2
+    mid_z = (z_limits[0] + z_limits[1]) / 2
+
+    ax.set_xlim3d([mid_x - max_range, mid_x + max_range])
+    ax.set_ylim3d([mid_y - max_range, mid_y + max_range])
+    ax.set_zlim3d([mid_z - max_range, mid_z + max_range])
+
+
+def _infer_layout(domain_min, domain_max, layout):
+    if layout != "auto":
+        return layout
+    domain_min = np.asarray(domain_min, dtype=float)
+    domain_max = np.asarray(domain_max, dtype=float)
+    if np.allclose(domain_min, -domain_max):
+        return "donut"
+    return "ex47"
+
+
+def _iter_centers(center):
+    center = np.asarray(center)
+    if center.size == 0:
+        return np.empty((0, 3))
+    return np.atleast_2d(center)
+
+
+def _plot_center_markers(ax, center, noaxis, domain_min, domain_max, layout):
+    centers = _iter_centers(center)
+    if centers.size == 0:
+        return
+
+    if layout == "donut":
+        if noaxis == "x1":
+            ax.tick_params(axis="x", which="major", labelsize=0, pad=6)
+            ax.set_xlabel("", fontsize=25, labelpad=15)
+            for i, center_point in enumerate(centers):
+                ax.scatter(
+                    center_point[0],
+                    center_point[1],
+                    center_point[2],
+                    color="black",
+                    s=100,
+                    marker="x",
+                    edgecolors="black",
+                    zorder=200,
+                )
+                ax.text(
+                    center_point[0] + 0.3,
+                    center_point[1] + 0.34,
+                    center_point[2] - 0.1,
+                    f"${{\\boldsymbol{{c}}_{{{i+1}}}}}$:({center_point[0]:.2f}, {center_point[1]:.2f}, {center_point[2]:.2f})",
+                    color="black",
+                    fontsize=16,
+                    fontweight="bold",
+                    ha="left",
+                    va="center",
+                    zorder=200,
+                )
+                ax.plot(
+                    [center_point[0] + 0.1, center_point[0]],
+                    [center_point[1], center_point[1]],
+                    [center_point[2] - 0.05, center_point[2]],
+                    color="black",
+                    linestyle="-",
+                    linewidth=2,
+                    zorder=200,
+                )
+        elif noaxis == "x2":
+            for i, center_point in enumerate(centers):
+                ax.scatter(
+                    center_point[0],
+                    center_point[1],
+                    center_point[2],
+                    color="black",
+                    s=100,
+                    marker="x",
+                    edgecolors="black",
+                    zorder=200,
+                )
+                ax.set_zlabel("", fontsize=0, labelpad=0)
+                ax.text(
+                    domain_max[0] + 0.1,
+                    domain_min[1] - 0.01,
+                    domain_max[2] + 0.05,
+                    "$x_3$",
+                    fontsize=25,
+                    ha="center",
+                )
+                ax.text(
+                    center_point[0] + 0.3,
+                    center_point[1] - 0.2,
+                    center_point[2] - 0.1,
+                    f"${{\\boldsymbol{{c}}_{{{i+1}}}}}$:({center_point[0]:.2f}, {center_point[1]:.2f}, {center_point[2]:.2f})",
+                    color="black",
+                    fontsize=16,
+                    fontweight="bold",
+                    ha="left",
+                    va="center",
+                    zorder=200,
+                )
+                ax.plot(
+                    [center_point[0] + 0.1, center_point[0]],
+                    [center_point[1], center_point[1]],
+                    [center_point[2] - 0.05, center_point[2]],
+                    color="black",
+                    linestyle="-",
+                    linewidth=2,
+                    zorder=200,
+                )
+        elif noaxis == "x3":
+            ax.tick_params(axis="z", which="major", labelsize=0, pad=6)
+            ax.set_zlabel("", fontsize=25, labelpad=15)
+            ax.set_xlabel("$x_1$", fontsize=25, labelpad=30)
+            ax.tick_params(axis="x", which="major", labelsize=18, pad=15)
+            ax.tick_params(axis="y", which="major", labelsize=18, pad=12)
+            for i, center_point in enumerate(centers):
+                ax.scatter(
+                    center_point[0],
+                    center_point[1],
+                    center_point[2],
+                    color="black",
+                    s=100,
+                    marker="x",
+                    edgecolors="black",
+                    zorder=200,
+                )
+                ax.text(
+                    center_point[0] + 0.15,
+                    center_point[1] - 0.32,
+                    center_point[2] - 0.1,
+                    f"${{\\boldsymbol{{c}}_{{{i+1}}}}}$:({center_point[0]:.2f}, {center_point[1]:.2f}, {center_point[2]:.2f})",
+                    color="black",
+                    fontsize=16,
+                    fontweight="bold",
+                    ha="left",
+                    va="center",
+                    zorder=200,
+                )
+                ax.plot(
+                    [center_point[0] + 0.1, center_point[0]],
+                    [center_point[1], center_point[1]],
+                    [center_point[2] - 0.05, center_point[2]],
+                    color="black",
+                    linestyle="-",
+                    linewidth=2,
+                    zorder=200,
+                )
+        return
+
+    if noaxis == "x1":
+        ax.tick_params(axis="x", which="major", labelsize=0, pad=6)
+        ax.set_xlabel("", fontsize=25, labelpad=15)
+        ax.set_zticks([tick for tick in ax.get_zticks() if tick != 0])
+        for i, center_point in enumerate(centers):
+            ax.scatter(
+                center_point[0],
+                center_point[1],
+                center_point[2],
+                color="black",
+                s=100,
+                marker="x",
+                edgecolors="black",
+                zorder=200,
+            )
+            ax.text(
+                center_point[0] + 0.4,
+                center_point[1] + 0.4,
+                center_point[2] - 0.1,
+                f"${{\\boldsymbol{{c}}_{{{i+1}}}}}$:({center_point[0]:.2f}, {center_point[1]:.2f}, {center_point[2]:.2f})",
+                color="black",
+                fontsize=16,
+                fontweight="bold",
+                ha="left",
+                va="center",
+                zorder=200,
+            )
+            ax.plot(
+                [center_point[0] + 0.05, center_point[0]],
+                [center_point[1] + 0.05, center_point[1]],
+                [center_point[2] - 0.05, center_point[2]],
+                color="black",
+                linestyle="-",
+                linewidth=2,
+                zorder=200,
+            )
+    elif noaxis == "x2":
+        ax.tick_params(axis="y", which="major", labelsize=0, pad=6)
+        ax.set_ylabel("", fontsize=25, labelpad=20)
+        ax.set_zlim([domain_min[2], domain_max[2]])
+        ax.set_zticks([tick for tick in ax.get_zticks() if tick != 0])
+        ax.tick_params(axis="x", which="major", labelsize=18, pad=3)
+        ax.tick_params(axis="z", which="major", labelsize=18, pad=10)
+        ax.set_zlabel("$x_3$", fontsize=25, labelpad=20)
+        for i, center_point in enumerate(centers):
+            ax.scatter(
+                center_point[0],
+                center_point[1],
+                center_point[2],
+                color="black",
+                s=100,
+                marker="x",
+                edgecolors="black",
+                zorder=200,
+            )
+            ax.text(
+                center_point[0] + 0.4,
+                center_point[1] + 0.4,
+                center_point[2] - 0.1,
+                f"${{\\boldsymbol{{c}}_{{{i+1}}}}}$:({center_point[0]:.2f}, {center_point[1]:.2f}, {center_point[2]:.2f})",
+                color="black",
+                fontsize=16,
+                fontweight="bold",
+                ha="left",
+                va="center",
+                zorder=200,
+            )
+            ax.plot(
+                [center_point[0] + 0.05, center_point[0]],
+                [center_point[1] + 0.05, center_point[1]],
+                [center_point[2] - 0.05, center_point[2]],
+                color="black",
+                linestyle="-",
+                linewidth=2,
+                zorder=200,
+            )
+    elif noaxis == "x3":
+        ax.tick_params(axis="z", which="major", labelsize=0, pad=6)
+        ax.set_zlabel("", fontsize=25, labelpad=0)
+        ax.set_xlabel("$x_1$", fontsize=25, labelpad=25)
+        ax.tick_params(axis="x", which="major", labelsize=18, pad=10)
+        ax.tick_params(axis="y", which="major", labelsize=18, pad=3)
+        ax.set_xticks([tick for tick in ax.get_zticks() if tick != 0])
+        for i, center_point in enumerate(centers):
+            ax.scatter(
+                center_point[0],
+                center_point[1],
+                center_point[2],
+                color="black",
+                s=100,
+                marker="x",
+                edgecolors="black",
+                zorder=200,
+            )
+            ax.text(
+                center_point[0] + 0.1,
+                center_point[1] + 0.3,
+                center_point[2] - 0.1,
+                f"${{\\boldsymbol{{c}}_{{{i+1}}}}}$:({center_point[0]:.2f}, {center_point[1]:.2f}, {center_point[2]:.2f})",
+                color="black",
+                fontsize=16,
+                fontweight="bold",
+                ha="left",
+                va="center",
+                zorder=200,
+            )
+            ax.plot(
+                [center_point[0] + 0.05, center_point[0]],
+                [center_point[1] + 0.05, center_point[1]],
+                [center_point[2] - 0.05, center_point[2]],
+                color="black",
+                linestyle="-",
+                linewidth=2,
+                zorder=200,
+            )
+
+
+def _plot_grad_view(mapped_mask_points, grad_values, domain_min, domain_max, elev, azim, full_output_path, dpi, layout):
+    norm = plt.Normalize(vmin=np.min(grad_values), vmax=np.max(grad_values))
+
+    donut_cmap = LinearSegmentedColormap.from_list(
+        "donut_cmap",
+        ["#fa8072", "#e84141", "#f23737"],
+        N=256,
+    )
+    colors_grad = donut_cmap(norm(grad_values))
+    norm_grad = plt.Normalize(vmin=np.min(grad_values), vmax=np.max(grad_values))
+    cmap_grad = plt.get_cmap("rainbow")
+    colors_grad = cmap_grad(norm_grad(grad_values))
+
+    fig = plt.figure(figsize=(12, 12))
+    ax = fig.add_subplot(111, projection="3d", facecolor="white")
+    ax.set_xlim([domain_min[0], domain_max[0]])
+    ax.set_ylim([domain_min[1], domain_max[1]])
+    ax.set_zlim([domain_min[2], domain_max[2]])
+
+    if layout == "donut":
+        ax.tick_params(axis="both", which="major", labelsize=16)
+        ax.tick_params(axis="z", which="major", labelsize=16)
+        ax.set_xlabel("X", fontsize=14, labelpad=10)
+        ax.set_ylabel("Y", fontsize=14, labelpad=10)
+        ax.set_zlabel("Z", fontsize=14, labelpad=10)
+    else:
+        ax.tick_params(axis="both", which="major", labelsize=18)
+        ax.set_xlabel("X", fontsize=18, labelpad=10)
+        ax.set_ylabel("Y", fontsize=18, labelpad=10)
+        ax.set_zlabel("Z", fontsize=18, labelpad=10)
+
+    ax.view_init(elev=elev, azim=azim)
+    ax.scatter(
+        mapped_mask_points[:, 0],
+        mapped_mask_points[:, 1],
+        mapped_mask_points[:, 2],
+        c=colors_grad,
+        s=3,
+        alpha=0.6,
+        edgecolors="none",
+    )
+
+    cmap = plt.get_cmap("rainbow")
+    mappable = plt.cm.ScalarMappable(norm=norm, cmap=cmap)
+    mappable.set_array([])
+    cbar = plt.colorbar(mappable, ax=ax, shrink=0.5, pad=0.001)
+    cbar.ax.tick_params(labelsize=18)
+
+    ax.grid(True, linestyle="--", alpha=0.3)
+    plt.tight_layout()
+    plt.savefig(full_output_path, dpi=dpi, bbox_inches="tight")
+    plt.show()
+
+
+def _plot_s_view(
+    mapped_mask_points,
+    s_values,
+    domain_min,
+    domain_max,
+    elev,
+    azim,
+    center,
+    noaxis,
+    full_output_path,
+    dpi,
+    layout,
+):
+    norm = plt.Normalize(vmin=np.min(s_values), vmax=np.max(s_values))
+    norm_s = plt.Normalize(vmin=np.min(s_values), vmax=np.max(s_values))
+    cmap_s = plt.get_cmap("rainbow")
+    colors_s = cmap_s(norm_s(s_values))
+
+    fig = plt.figure(figsize=(10, 10))
+    ax = fig.add_subplot(111, projection="3d", facecolor="white")
+    ax.set_position([0.01, 0.02, 0.75, 0.96])
+    ax.set_xlim([domain_min[0], domain_max[0]])
+    ax.set_ylim([domain_min[1], domain_max[1]])
+    ax.set_zlim([domain_min[2], domain_max[2]])
+
+    if layout == "donut":
+        ax.tick_params(axis="both", which="major", labelsize=16, pad=6)
+        ax.tick_params(axis="x", which="major", labelsize=16, pad=6)
+        ax.set_xlabel("$x_1$", fontsize=25, labelpad=20)
+        ax.set_ylabel("$x_2$", fontsize=25, labelpad=20)
+        ax.set_zlabel("$x_3$", fontsize=25, labelpad=15)
+        set_axes_equal(ax)
+    else:
+        ax.tick_params(axis="both", which="major", labelsize=18, pad=6)
+        ax.set_xlabel("$x_1$", fontsize=25, labelpad=15)
+        ax.set_ylabel("$x_2$", fontsize=25, labelpad=20)
+        ax.set_zlabel("$x_3$", fontsize=25, labelpad=15)
+
+    ax.set_box_aspect([1, 1, 1])
+    ax.view_init(elev=elev, azim=azim)
+    _plot_center_markers(ax, center, noaxis, domain_min, domain_max, layout)
+    ax.dist = 10
+
+    ax.scatter(
+        mapped_mask_points[:, 0],
+        mapped_mask_points[:, 1],
+        mapped_mask_points[:, 2],
+        c=colors_s,
+        s=3,
+        alpha=0.6,
+        edgecolors="none",
+    )
+
+    cmap = plt.get_cmap("rainbow")
+    mappable = plt.cm.ScalarMappable(norm=norm, cmap=cmap)
+    mappable.set_array([])
+    cbar = plt.colorbar(mappable, ax=ax, shrink=0.5, pad=0.01)
+    cbar.ax.tick_params(labelsize=20)
+
+    ax.grid(True, linestyle="--", alpha=0.3)
+    plt.savefig(full_output_path, dpi=dpi, bbox_inches="tight", pad_inches=0.05)
+    plt.show()
+
+
+def filter_q_3d(
+    grad,
+    S_num,
+    domain_min,
+    domain_max,
+    para_grad,
+    para_abs,
+    elev,
+    azim,
+    center,
+    choose,
+    noaxis,
+    output_directory=".",
+    output_filename="plot_3d.png",
+    dpi=300,
+    layout="auto",
+):
+    if dpi is None:
+        dpi = 300
+
+    if output_directory and not os.path.exists(output_directory):
+        os.makedirs(output_directory)
+    full_output_path = os.path.join(output_directory, output_filename)
+
+    layout = _infer_layout(domain_min, domain_max, layout)
+    shape_3d = grad.shape
+    grad_threshold = np.max(grad) / para_grad
+    abs_threshold = np.max(np.abs(S_num)) / para_abs
+    mask = (grad > grad_threshold) & (np.abs(S_num) > abs_threshold)
+    mask_indices = np.array(np.where(mask)).T
+
+    if len(mask_indices) < 4:
+        print("Warning: Not enough points to form a 3D convex hull.")
+        return
+
+    mapped_mask_points = map_index_to_domain_3d(mask_indices, domain_min, domain_max, shape_3d)
+    min_x_point = mapped_mask_points[np.argmin(mapped_mask_points[:, 0])]
+    max_x_point = mapped_mask_points[np.argmax(mapped_mask_points[:, 0])]
+    min_y_point = mapped_mask_points[np.argmin(mapped_mask_points[:, 1])]
+    max_y_point = mapped_mask_points[np.argmax(mapped_mask_points[:, 1])]
+    min_z_point = mapped_mask_points[np.argmin(mapped_mask_points[:, 2])]
+    max_z_point = mapped_mask_points[np.argmax(mapped_mask_points[:, 2])]
+
+    if choose == "grad":
+        grad_values = grad[mask]
+        _plot_grad_view(
+            mapped_mask_points,
+            grad_values,
+            domain_min,
+            domain_max,
+            elev,
+            azim,
+            full_output_path,
+            dpi,
+            layout,
+        )
+    elif choose == "S":
+        s_values = S_num[mask]
+        _plot_s_view(
+            mapped_mask_points,
+            s_values,
+            domain_min,
+            domain_max,
+            elev,
+            azim,
+            center,
+            noaxis,
+            full_output_path,
+            dpi,
+            layout,
+        )
+
+    return (
+        mapped_mask_points,
+        min_x_point,
+        max_x_point,
+        min_y_point,
+        max_y_point,
+        min_z_point,
+        max_z_point,
+    )
+
+
+def detect_3d(*args, **kwargs):
+    return filter_q_3d(*args, **kwargs)
