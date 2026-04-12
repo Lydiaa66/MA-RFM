@@ -1,118 +1,140 @@
-python --Version
-Python 3.9.21
+# MA-RFM
 
-pip list
-Package                   Version     Build
-------------------------- ----------- -----
-asttokens                 3.0.0
-attrs                     25.4.0
-beautifulsoup4            4.14.3
-bleach                    6.2.0
-certifi                   2025.4.26
-charset-normalizer        3.4.2
-cmake                     4.0.0
-comm                      0.2.2
-contourpy                 1.3.0
-cupy-cuda12x              13.4.1
-cycler                    0.12.1
-debugpy                   1.8.14
-decorator                 5.2.1
-defusedxml                0.7.1
-exceptiongroup            1.2.2
-executing                 2.2.0
-fastjsonschema            2.21.2
-fastrlock                 0.8.3
-filelock                  3.18.0
-fonttools                 4.57.0
-idna                      3.10
-importlib_metadata        8.7.0
-importlib_resources       6.5.2
-ipykernel                 6.29.5
-ipympl                    0.9.7
-ipython                   8.18.1
-ipywidgets                8.1.7
-jedi                      0.19.2
-Jinja2                    3.1.6
-joblib                    1.5.3
-jsonschema                4.25.1
-jsonschema-specifications 2025.9.1
-jupyter_client            8.6.3
-jupyter_core              5.7.2
-jupyterlab_pygments       0.3.0
-jupyterlab_widgets        3.0.15
-kiwisolver                1.4.7
-lit                       18.1.8
-MarkupSafe                3.0.2
-matplotlib                3.9.4
-matplotlib-inline         0.1.7
-mistune                   3.2.0
-mpmath                    1.3.0
-narwhals                  2.0.1
-nbclient                  0.10.2
-nbconvert                 7.17.0
-nbformat                  5.10.4
-nest-asyncio              1.6.0
-networkx                  3.2.1
-numpy                     1.26.4
-nvidia-cublas-cu11        11.10.3.66
-nvidia-cuda-cupti-cu11    11.7.101
-nvidia-cuda-nvrtc-cu11    11.7.99     2
-nvidia-cuda-runtime-cu11  11.7.99
-nvidia-cuda-runtime-cu12  12.4.127
-nvidia-cudnn-cu11         8.5.0.96    2
-nvidia-cufft-cu11         10.9.0.58
-nvidia-curand-cu11        10.2.10.91
-nvidia-cusolver-cu11      11.4.0.1    2
-nvidia-cusparse-cu11      11.7.4.91
-nvidia-nccl-cu11          2.14.3
-nvidia-nvtx-cu11          11.7.91
-opencv-python             4.13.0.90
-packaging                 25.0
-pandas                    2.2.3
-pandocfilters             1.5.1
-parso                     0.8.4
-pexpect                   4.9.0
-pillow                    11.2.1
-pip                       25.1
-platformdirs              4.3.7
-plotly                    6.2.0
-prompt_toolkit            3.0.51
-psutil                    7.0.0
-ptyprocess                0.7.0
-pure_eval                 0.2.3
-Pygments                  2.19.1
-pyparsing                 3.2.3
-PyQt5                     5.15.11
-PyQt5-Qt5                 5.15.17
-PyQt5_sip                 12.17.0
-python-dateutil           2.9.0.post0
-pytz                      2025.2
-pyzmq                     26.4.0
-referencing               0.36.2
-requests                  2.32.3
-rpds-py                   0.27.1
-scikit-learn              1.6.1
-scipy                     1.13.1
-seaborn                   0.13.2
-setuptools                78.1.1
-six                       1.17.0
-soupsieve                 2.8.3
-stack-data                0.6.3
-sympy                     1.14.0
-threadpoolctl             3.6.0
-tinycss2                  1.4.0
-torch                     2.0.1
-torchaudio                2.0.2
-torchvision               0.15.2
-tornado                   6.4.2
-traitlets                 5.14.3
-triton                    2.0.0
-typing_extensions         4.13.2
-tzdata                    2025.2
-urllib3                   2.4.0
-wcwidth                   0.2.13
-webencodings              0.5.1
-wheel                     0.45.1
-widgetsnbextension        4.0.14
-zipp                      3.21.0
+This repository contains the implementation and numerical experiments for MA-RFM, an adaptive random feature method for inverse source reconstruction.  The code includes both 2D and 3D experiments, adaptive mesh refinement, source reconstruction, shape detection, and visualization utilities.
 
+## Repository Layout
+
+```text
+MA-RFM/
+├── main_code/
+│   ├── 2d/                 # Shared 2D implementation
+│   └── 3d/                 # Shared 3D implementation
+├── Ex4.1/                  # 2D baseline experiment
+├── Ex4.2/                  # 2D IA-RFM experiments
+├── Ex4.3/                  # 2D MA-RFM experiment with a rectangle/circle source
+├── Ex4.4/                  # 2D two-source experiment
+├── Ex4.5/                  # 2D sensitivity and noise experiments
+├── Ex4.6/                  # 2D general-shape/kidney experiment
+├── Ex4.7/                  # 3D multi-source experiment
+├── 3D_donut/               # 3D torus/donut experiment
+└── limited_aperture/       # Limited-aperture experiments
+```
+
+The reusable code is organized under `main_code/2d` and `main_code/3d`.  The experiment folders contain Jupyter notebooks and saved numerical results used to reproduce the examples.
+
+## Main Modules
+
+2D modules:
+
+```text
+main.py              Adaptive reconstruction driver
+adaptive_int.py      Adaptive mesh refinement
+matrix_assemble.py   Forward-operator matrix assembly
+inverse_solver.py    Regularized inverse solve and L-curve utilities
+net_2d.py            2D random feature models
+source_eval.py       Source and gradient evaluation
+bound_detect.py      Shape detection and boundary processing
+generate_data.py     Synthetic data generation
+visual.py            Plotting and mesh visualization
+```
+
+3D modules:
+
+```text
+main.py              Adaptive reconstruction driver
+adaptive_int.py      Adaptive mesh refinement
+matrix_assemble.py   Forward-operator matrix assembly
+inverse_solver.py    Regularized inverse solve and L-curve utilities
+net_3d.py            3D random feature models
+source_eval.py       Source and gradient evaluation
+bound_detect.py      3D shape detection and boundary processing
+generate_data.py     Synthetic data generation
+visual.py            3D plotting and grid visualization
+```
+
+## Environment
+
+The experiments were developed with Python 3.9 and CUDA-enabled GPU acceleration.  A typical environment includes:
+
+```text
+python >= 3.9
+numpy
+scipy
+torch
+cupy-cuda12x
+matplotlib
+seaborn
+scikit-learn
+opencv-python
+jupyter
+```
+
+Example installation:
+
+```bash
+conda create -n ma-rfm python=3.9
+conda activate ma-rfm
+pip install numpy scipy matplotlib seaborn scikit-learn opencv-python jupyter
+pip install torch torchvision torchaudio
+pip install cupy-cuda12x
+```
+
+Choose the CuPy package that matches your local CUDA version.  For example, use `cupy-cuda11x` instead of `cupy-cuda12x` if your CUDA runtime is based on CUDA 11.
+
+## GPU Notes
+
+Most notebooks define both a PyTorch device and a CuPy device, for example:
+
+```python
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+cupy_device = 0
+```
+
+These two settings should refer to the same GPU.  If `device` is `cuda:1`, set `cupy_device = 1`.
+
+## Running the Experiments
+
+The experiments are organized as notebooks.  A typical workflow is:
+
+1. Open the notebook in the desired example folder, such as `Ex4.5/Noise_MA_RFM_5%.ipynb` or `3D_donut/MA_RFM_5%.ipynb`.
+2. Make sure the notebook appends the correct module path, for example `../main_code/2d` or `../main_code/3d`.
+3. Select the correct `device` and `cupy_device`.
+4. Run the data-generation cells if the required `.npy` data are not already present.
+5. Run the IA-RFM or MA-RFM reconstruction cells.
+6. Use the visualization notebook or visualization cells to reproduce the figures.
+
+Important entry points:
+
+```text
+Ex4.3/Noise_MA_RFM_5%.ipynb       2D rectangle/circle noisy MA-RFM example
+Ex4.4/Noise_MA_RFM_5%.ipynb       2D two-source noisy MA-RFM example
+Ex4.5/senstivity_5%.ipynb         Parameter sensitivity study
+Ex4.6/MA_RFM_5%.ipynb             2D general-shape/kidney example
+Ex4.7/MA_RFM_5%.ipynb             3D multi-source example
+3D_donut/MA_RFM_5%.ipynb          3D torus/donut example
+```
+
+## Saved Results
+
+Some experiment folders include saved arrays, trained model weights, figures, and intermediate reconstruction data, such as:
+
+```text
+*.npy       numerical arrays and reconstruction results
+*.pth       saved PyTorch model weights
+*.pkl       saved adaptive mesh objects or parameter dictionaries
+*.pdf/png   generated figures
+```
+
+These files are included for reproducibility and for quickly regenerating figures without rerunning all expensive computations.
+
+## Reproducibility Notes
+
+Several notebooks set random seeds through NumPy and PyTorch.  Exact results may still vary across GPU models, CUDA versions, PyTorch/CuPy versions, and the selected regularization parameter.  The L-curve regularization parameter is selected manually in the provided experiments.
+
+## Citation
+
+If you use this code, please cite the associated MA-RFM paper.  Add the BibTeX entry here after the paper metadata is finalized.
+
+## License
+
+Add a license file before public release if this repository is distributed publicly.
