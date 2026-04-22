@@ -5,6 +5,14 @@ import torch.nn as nn
 torch.set_default_dtype(torch.float64)
 
 
+_ELLIPTIC_GAUSS_SHAPES = {
+    "elliptic_gauss",
+    "elliptic_gaussian",
+    "elliptical_gauss",
+    "elliptical_gaussian",
+}
+
+
 def _ordered_bounds(a, b):
     a = float(a)
     b = float(b)
@@ -353,6 +361,19 @@ class local_rep(nn.Module):
     def __init__(self, in_features, out_features, hidden_layers, M, *args, **kwargs):
         super().__init__()
         cfg = _parse_local_rep_args(args, kwargs)
+        original_af = cfg["af"]
+        relu_shape_override = original_af in {"Relu", "relu"} and cfg["Shape"] in {
+            "circle",
+            "rec",
+            "ellipsoid",
+            "ellipse",
+            "general",
+            "noise",
+        }
+        if relu_shape_override:
+            cfg = dict(cfg)
+            cfg["af"] = "sigmoid"
+        init_af = cfg["af"]
 
         self.device = cfg["device"]
         self.in_features = in_features
@@ -365,7 +386,7 @@ class local_rep(nn.Module):
         self.y_min = cfg["y_min"]
         self.M = M
         self.M_noise = _optional_int(cfg["M_noise"])
-        self.af = cfg["af"]
+        self.af = original_af
         self.Shape = cfg["Shape"]
         self.a = torch.tensor(
             [2.0 / (self.x_max - self.x_min), 2.0 / (self.y_max - self.y_min)]
@@ -404,28 +425,35 @@ class local_rep(nn.Module):
         v_min, v_max = _ordered_bounds(v_min, v_max)
         K_min, K_max = _ordered_bounds(K_min, K_max)
 
-        if self.af == "mix":
+        if init_af == "mix":
             weights_init(self.hidden_layer_1[0], R_m=R_m_for_init, b_min=b1_min, b_max=b1_max)
             weights_init(self.hidden_layer_2[0], R_m=R_m_for_init, b_min=b2_min, b_max=b2_max)
             weights_init(self.hidden_layer[0], R_m=R_m_for_init, b_min=-R_m_for_init, b_max=R_m_for_init)
             self.r_values = torch.empty(self.M, dtype=torch.float64).uniform_(r_min, r_max).to(self.device)
             self.K = torch.empty(self.M, dtype=torch.float64).uniform_(K_min, K_max).to(self.device)
-        elif self.af == "Tanh":
+        elif init_af == "Tanh":
             weights_init(self.hidden_layer[0], R_m=R_m_for_init, b_min=-R_m_for_init, b_max=R_m_for_init)
-        elif self.af == "sigmoid" and self.Shape == "circle":
+        elif init_af == "sigmoid" and self.Shape == "circle":
             weights_init(self.hidden_layer_1[0], R_m=R_m_for_init, b_min=b1_min, b_max=b1_max)
             weights_init(self.hidden_layer_2[0], R_m=R_m_for_init, b_min=b2_min, b_max=b2_max)
             self.r_values = torch.empty(self.M, dtype=torch.float64).uniform_(r_min, r_max).to(self.device)
             self.K = torch.empty(self.M, dtype=torch.float64).uniform_(K_min, K_max).to(self.device)
-        elif self.af == "sigmoid" and self.Shape == "rec":
+        elif init_af == "sigmoid" and self.Shape == "rec":
             weights_init(self.hidden_layer_1[0], R_m=R_m_for_init, b_min=b1_min, b_max=b1_max)
             weights_init(self.hidden_layer_2[0], R_m=R_m_for_init, b_min=b2_min, b_max=b2_max)
             self.width = torch.empty(self.M, dtype=torch.float64).uniform_(width_min, width_max).to(self.device)
             self.height = torch.empty(self.M, dtype=torch.float64).uniform_(height_min, height_max).to(self.device)
             self.K = torch.empty(self.M, dtype=torch.float64).uniform_(K_min, K_max).to(self.device)
-        elif self.af == "sigmoid" and self.Shape == "general":
+        elif init_af == "sigmoid" and self.Shape in {"ellipsoid", "ellipse"}:
+            self.center_x = torch.empty(self.M, dtype=torch.float64).uniform_(b1_min, b1_max).to(self.device)
+            self.center_y = torch.empty(self.M, dtype=torch.float64).uniform_(b2_min, b2_max).to(self.device)
+            self.axis_a = torch.empty(self.M, dtype=torch.float64).uniform_(width_min, width_max).to(self.device)
+            self.axis_b = torch.empty(self.M, dtype=torch.float64).uniform_(height_min, height_max).to(self.device)
+            self.theta_values = torch.empty(self.M, dtype=torch.float64).uniform_(r_min, r_max).to(self.device)
             self.K = torch.empty(self.M, dtype=torch.float64).uniform_(K_min, K_max).to(self.device)
-        elif self.af == "sigmoid" and self.Shape == "noise":
+        elif init_af == "sigmoid" and self.Shape == "general":
+            self.K = torch.empty(self.M, dtype=torch.float64).uniform_(K_min, K_max).to(self.device)
+        elif init_af == "sigmoid" and self.Shape == "noise":
             noise_width = max(self.M_noise, 1)
             self.hidden_layer_1 = nn.Sequential(nn.Linear(1, noise_width, bias=True))
             self.hidden_layer_2 = nn.Sequential(nn.Linear(1, noise_width, bias=True))
@@ -437,7 +465,17 @@ class local_rep(nn.Module):
                 self.hidden_layer_2[0].bias.data = torch.tensor(cfg["b2_noise"], dtype=torch.float64).to(self.device)
             self.r_values = torch.empty(noise_width, dtype=torch.float64).uniform_(r_min, r_max).to(self.device)
             self.K = torch.empty(noise_width, dtype=torch.float64).uniform_(K_min, K_max).to(self.device)
-        elif self.af in {"Gauss", "continue_gauss"}:
+        elif init_af in {"Gauss", "continue_gauss"} and self.Shape in _ELLIPTIC_GAUSS_SHAPES:
+            weights_init(self.hidden_layer_1[0], R_m=R_m_for_init, b_min=b1_min, b_max=b1_max)
+            weights_init(self.hidden_layer_2[0], R_m=R_m_for_init, b_min=b2_min, b_max=b2_max)
+            self.axis_a = torch.empty(self.M, dtype=torch.float64).uniform_(width_min, width_max).to(self.device)
+            self.axis_b = torch.empty(self.M, dtype=torch.float64).uniform_(height_min, height_max).to(self.device)
+            self.theta_values = torch.empty(self.M, dtype=torch.float64).uniform_(r_min, r_max).to(self.device)
+            self.K = torch.empty(self.M, dtype=torch.float64).uniform_(K_min, K_max).to(self.device)
+            self.gauss_amp = torch.empty(self.M, dtype=torch.float64).uniform_(peak_min, peak_max).to(self.device)
+            self.gauss_scale_exp = torch.empty(self.M, dtype=torch.float64).uniform_(v_min, v_max).to(self.device)
+            self.gauss_scale_sig = torch.empty(self.M, dtype=torch.float64).uniform_(K_min, K_max).to(self.device)
+        elif init_af in {"Gauss", "continue_gauss"}:
             weights_init(self.hidden_layer_1[0], R_m=R_m_for_init, b_min=b1_min, b_max=b1_max)
             weights_init(self.hidden_layer_2[0], R_m=R_m_for_init, b_min=b2_min, b_max=b2_max)
             self.r_values = torch.empty(self.M, dtype=torch.float64).uniform_(r_min, r_max).to(self.device)
@@ -454,7 +492,7 @@ class local_rep(nn.Module):
             return shape
 
         shape = getattr(self, "Shape", None)
-        if _is_empty(shape) and af == "sigmoid":
+        if _is_empty(shape) and af in {"sigmoid", "Relu", "relu"}:
             if hasattr(self, "width") and hasattr(self, "height"):
                 shape = "rec"
             elif getattr(self, "M_noise", 0):
@@ -464,8 +502,57 @@ class local_rep(nn.Module):
             self.Shape = shape
         return shape
 
+    def _move_tensor_attrs(self, *names):
+        for name in names:
+            if hasattr(self, name):
+                value = getattr(self, name)
+                if isinstance(value, torch.Tensor):
+                    setattr(self, name, value.to(self.device))
+
+    def _rectangle_metric(self, x):
+        self._move_tensor_attrs("width", "height")
+        y1 = self.hidden_layer_1(x[..., 0:1])
+        y2 = self.hidden_layer_2(x[..., 1:2])
+        width = torch.clamp(self.width.repeat(y1.shape[0], 1), min=1e-12)
+        height = torch.clamp(self.height.repeat(y2.shape[0], 1), min=1e-12)
+        return torch.maximum(2.0 * torch.abs(y1) / width, 2.0 * torch.abs(y2) / height)
+
+    def _ellipse_metric(self, x):
+        self._move_tensor_attrs("center_x", "center_y", "axis_a", "axis_b", "theta_values")
+        center_x = self.center_x.repeat(x.shape[0], 1)
+        center_y = self.center_y.repeat(x.shape[0], 1)
+        axis_a = torch.clamp(self.axis_a.repeat(x.shape[0], 1), min=1e-12)
+        axis_b = torch.clamp(self.axis_b.repeat(x.shape[0], 1), min=1e-12)
+        theta = self.theta_values.repeat(x.shape[0], 1)
+        cos_theta = torch.cos(theta)
+        sin_theta = torch.sin(theta)
+        x1 = x[..., 0:1] - center_x
+        x2 = x[..., 1:2] - center_y
+        x_rot = x1 * cos_theta + x2 * sin_theta
+        y_rot = -x1 * sin_theta + x2 * cos_theta
+        metric_sq = (x_rot / axis_a) ** 2 + (y_rot / axis_b) ** 2
+        metric = torch.sqrt(metric_sq)
+        return metric, metric_sq
+
+    def _elliptic_gauss_metric(self, x):
+        self._move_tensor_attrs("axis_a", "axis_b", "theta_values")
+        x1 = self.hidden_layer_1(x[..., 0:1])
+        x2 = self.hidden_layer_2(x[..., 1:2])
+        theta = self.theta_values.repeat(x1.shape[0], 1)
+        cos_theta = torch.cos(theta)
+        sin_theta = torch.sin(theta)
+        x_rot = x1 * cos_theta + x2 * sin_theta
+        y_rot = -x1 * sin_theta + x2 * cos_theta
+        axis_a = torch.clamp(self.axis_a.repeat(x1.shape[0], 1), min=1e-12)
+        axis_b = torch.clamp(self.axis_b.repeat(x2.shape[0], 1), min=1e-12)
+        metric_sq = (x_rot / axis_a) ** 2 + (y_rot / axis_b) ** 2
+        metric = torch.sqrt(metric_sq)
+        return metric, metric_sq
+
     def forward(self, x, af, shape=None, signed_distances=None):
         shape = self._resolve_shape(af, shape)
+        self.device = x.device
+        self._move_tensor_attrs("a", "x_0", "K", "r_values", "gauss_amp", "gauss_scale_exp", "gauss_scale_sig")
 
         y = self.a * (x - self.x_0)
         y = self.hidden_layer(y)
@@ -479,18 +566,20 @@ class local_rep(nn.Module):
             K = self.K.repeat(y1.shape[0], 1)
             return torch.sigmoid(K * (r - r_hat))
         if af == "sigmoid" and shape == "rec":
-            y1 = self.hidden_layer_1(x[..., 0:1])
-            y2 = self.hidden_layer_2(x[..., 1:2])
-            rect_distance_x = torch.abs(y1) - self.width / 2
-            rect_distance_y = torch.abs(y2) - self.height / 2
-            rect_distance = torch.max(rect_distance_x, rect_distance_y)
-            K = self.K.repeat(y1.shape[0], 1)
-            return torch.sigmoid(-K * rect_distance)
+            metric = self._rectangle_metric(x)
+            K = self.K.repeat(metric.shape[0], 1)
+            return torch.sigmoid(K * (1.0 - metric))
+        if af == "sigmoid" and shape in {"ellipsoid", "ellipse"}:
+            metric, _ = self._ellipse_metric(x)
+            K = self.K.repeat(metric.shape[0], 1)
+            return torch.sigmoid(K * (1.0 - metric))
         if af == "sigmoid" and shape == "general":
             if _is_empty(signed_distances):
                 raise ValueError("signed_distances is required for Shape='general'")
             if not isinstance(signed_distances, torch.Tensor):
-                signed_distances = torch.tensor(signed_distances, dtype=torch.float64).to(device)
+                signed_distances = torch.tensor(signed_distances, dtype=torch.float64, device=self.device)
+            else:
+                signed_distances = signed_distances.to(self.device)
             K = self.K.repeat(y.shape[0], 1)
             return torch.sigmoid(K * signed_distances)
         if af == "sigmoid" and shape == "noise":
@@ -500,7 +589,23 @@ class local_rep(nn.Module):
             r = self.r_values.repeat(y1.shape[0], 1)
             K = self.K.repeat(y1.shape[0], 1)
             return torch.sigmoid(K * (r - r_hat))
+        if af in {"Relu", "relu"} and shape == "rec":
+            metric = self._rectangle_metric(x)
+            K = self.K.repeat(metric.shape[0], 1)
+            return torch.relu(K * (1.0 - metric))
+        if af in {"Relu", "relu"} and shape in {"ellipsoid", "ellipse"}:
+            metric, _ = self._ellipse_metric(x)
+            K = self.K.repeat(metric.shape[0], 1)
+            return torch.relu(K * (1.0 - metric))
         if af == "Gauss":
+            if shape in _ELLIPTIC_GAUSS_SHAPES:
+                _, metric_sq = self._elliptic_gauss_metric(x)
+                gauss_amp_b = self.gauss_amp.repeat(x.shape[0], 1)
+                gauss_scale_exp_b = self.gauss_scale_exp.repeat(x.shape[0], 1)
+                gauss_scale_sig_b = self.gauss_scale_sig.repeat(x.shape[0], 1)
+                return gauss_amp_b * torch.exp(gauss_scale_exp_b * metric_sq) * torch.sigmoid(
+                    gauss_scale_sig_b * (1.0 - metric_sq)
+                )
             y1 = self.hidden_layer_1(x[..., 0:1])
             y2 = self.hidden_layer_2(x[..., 1:2])
             r_hat_sq = y1**2 + y2**2
@@ -512,6 +617,11 @@ class local_rep(nn.Module):
                 gauss_scale_sig_b * (r**2 - r_hat_sq)
             )
         if af == "continue_gauss":
+            if shape in _ELLIPTIC_GAUSS_SHAPES:
+                _, metric_sq = self._elliptic_gauss_metric(x)
+                gauss_amp_b = self.gauss_amp.repeat(x.shape[0], 1)
+                gauss_scale_exp_b = self.gauss_scale_exp.repeat(x.shape[0], 1)
+                return gauss_amp_b * torch.exp(gauss_scale_exp_b * metric_sq)
             y1 = self.hidden_layer_1(x[..., 0:1])
             y2 = self.hidden_layer_2(x[..., 1:2])
             r_hat_sq = y1**2 + y2**2

@@ -1,4 +1,3 @@
-import generate_data
 import numpy as np
 
 class Cell:
@@ -18,6 +17,7 @@ class Cell:
         self.children = []
 
     def pre_calculate(self, n):
+        import generate_data
         g=generate_data.GaussLegendre3D_rec(n,self.x0,self.x0+self.size,self.y0,self.y0+self.size,self.z0,self.z0+self.size,self.x)
         self.gauss_points=g.points_int
         self.w=g.w
@@ -68,4 +68,3 @@ def collect_leaf_cells(cells):
         else:
             leaf_cells.extend(collect_leaf_cells(cell.children))
     return leaf_cells
-

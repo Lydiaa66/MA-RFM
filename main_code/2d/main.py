@@ -115,9 +115,15 @@ def _ada_int_plain(
             Cells, models, [], [], af, kk, 0, points_b, device, cupy_device
         )
         res, reg_norm, w_store = inverse_solver.L_curve(M, [], [], af, all_mat, F, lamb_regu, cupy_device)
+        best_idx, best_lambda, current_w, _ = inverse_solver.choose_lambda_by_curvature(
+            lamb_regu,
+            res,
+            reg_norm,
+            w_store=w_store,
+            verbose=len(np.asarray(lamb_regu).reshape(-1)) > 1,
+        )
 
         print("Training error at iteration", i, ":")
-        current_w = w_store[:, 0]
         S_num, grad_S_num = source_eval.valgrad(
             models, af, M, all_points0, current_w, ana_S, center_true, r_true, device
         )
@@ -233,8 +239,13 @@ def _ada_int_fix_ex43(
         res, reg_norm, w_store = inverse_solver.L_curve(
             all_mat, F, [], [], [], lamb_regu, "linear", device, cupy_device
         )
-
-        current_w = w_store[:, 0]
+        best_idx, best_lambda, current_w, _ = inverse_solver.choose_lambda_by_curvature(
+            lamb_regu,
+            res,
+            reg_norm,
+            w_store=w_store,
+            verbose=len(np.asarray(lamb_regu).reshape(-1)) > 1,
+        )
         w_.append(current_w)
 
         print("Training error at iteration", i, ":")
@@ -357,7 +368,13 @@ def _ada_int_shape(
         res, reg_norm, w_store = inverse_solver.L_curve(
             all_mat, F, [], [], [], lamb_regu, "linear", device, cupy_device
         )
-        current_w = w_store[:, 0]
+        best_idx, best_lambda, current_w, _ = inverse_solver.choose_lambda_by_curvature(
+            lamb_regu,
+            res,
+            reg_norm,
+            w_store=w_store,
+            verbose=len(np.asarray(lamb_regu).reshape(-1)) > 1,
+        )
 
         print("Training error at iteration", i, ":")
         S_num, grad_S_num = source_eval.valgrad(
@@ -481,7 +498,13 @@ def _ada_int_signed(
         res, reg_norm, w_store = inverse_solver.L_curve(
             all_mat, F, [], [], [], lamb_regu, "linear", device, cupy_device
         )
-        current_w = w_store[:, 0]
+        best_idx, best_lambda, current_w, _ = inverse_solver.choose_lambda_by_curvature(
+            lamb_regu,
+            res,
+            reg_norm,
+            w_store=w_store,
+            verbose=len(np.asarray(lamb_regu).reshape(-1)) > 1,
+        )
 
         print("Training error at iteration", i, ":")
         S_num, grad_S_num = source_eval.valgrad(

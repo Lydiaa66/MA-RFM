@@ -8,7 +8,6 @@ from scipy.linalg import lstsq,pinv
 from scipy.optimize import least_squares
 import matplotlib.pyplot as plt
 import itertools
-import seaborn as sns
 import cupy as cp
 torch.set_default_dtype(torch.float64)
 

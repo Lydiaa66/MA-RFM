@@ -50,13 +50,19 @@ def _ada_int_ex47(iter_int,delta,cells,nx,models,M,af,kk,F,tau_x_min,tau_x_max,t
         all_mat,all_g_list,all_g_p,Cells,S_basis=matrix_assemble.mat_assemble2(Cells,models,[],[],[],[],[],af,kk,0,points_b,device,cupy_device) 
         #lamb_regu=np.logspace(-13,-12, 1, endpoint = True) 
         res,reg_norm,w_store=inverse_solver.L_curve(M,[],[],[],[],af,all_mat,F,lamb_regu,cupy_device) # Solve first.
+        best_idx, best_lambda, current_w, _ = inverse_solver.choose_lambda_by_curvature(
+            lamb_regu,
+            res,
+            reg_norm,
+            w_store=w_store,
+            verbose=len(np.asarray(lamb_regu).reshape(-1)) > 1,
+        )
         print("Training error at iteration", i, ":")
-        S_num,grad_S_num=source_eval.valgrad(models,af,M,all_points0,w_store[:,0],ana_S,center_true,r_true,device)
+        S_num,grad_S_num=source_eval.valgrad(models,af,M,all_points0,current_w,ana_S,center_true,r_true,device)
         print("Generalization error at iteration", i, ":")
-        S_test_num,S_test_true,S_l_inf1,S_l_21,g_S=error_general_3d.test(models,[],[],[],[],sample_s,w_store[:,0],af,True,True,tau_x_min,tau_x_max,tau_y_min,tau_y_max,tau_z_min,tau_z_max,[],[],[],[],center_true,r_true,ana_S,1,ratio1,ratio2,device)
+        S_test_num,S_test_true,S_l_inf1,S_l_21,g_S=error_general_3d.test(models,[],[],[],[],sample_s,current_w,af,True,True,tau_x_min,tau_x_max,tau_y_min,tau_y_max,tau_z_min,tau_z_max,[],[],[],[],center_true,r_true,ana_S,1,ratio1,ratio2,device)
         S_num_store.append(S_test_num)
         S_l2.append(S_l_21)
-        current_w = w_store[:,0] # Use best lambda
         w_.append(current_w)
         
         if i>=1:
@@ -127,14 +133,20 @@ def _ada_int_donut(iter_int,delta,cells,nx,models,M,af,kk,F,tau_x_min,tau_x_max,
         g_store.append(all_points0)
         all_mat,all_g_list,all_g_p,Cells,S_basis=matrix_assemble.mat_assemble2(Cells,models,[],[],[],af,[],kk,0,points_b,condition,device,cupy_device)
         res,reg_norm,w_store=inverse_solver.L_curve(all_mat,F,lamb_regu,cupy_device)
+        best_idx, best_lambda, current_w, _ = inverse_solver.choose_lambda_by_curvature(
+            lamb_regu,
+            res,
+            reg_norm,
+            w_store=w_store,
+            verbose=len(np.asarray(lamb_regu).reshape(-1)) > 1,
+        )
         print("Training error at iteration", i, ":")
-        S_num,grad_S_num=source_eval.valgrad(models,af,M,all_points0,w_store[:,0],ana_S,center_true,R_true,r_true,S0,device)
+        S_num,grad_S_num=source_eval.valgrad(models,af,M,all_points0,current_w,ana_S,center_true,R_true,r_true,S0,device)
         print("Generalization error at iteration", i, ":")
-        S_test_num,S_test_true,S_l_inf1,S_l_21,g_S=error_general_3d.test(models,[],sample_s,w_store[:,0],af,[],True,True,tau_x_min,tau_x_max,tau_y_min,tau_y_max,tau_z_min,tau_z_max,center_true,R_true,r_true,S0,ana_S,1,ratio1,device)
+        S_test_num,S_test_true,S_l_inf1,S_l_21,g_S=error_general_3d.test(models,[],sample_s,current_w,af,[],True,True,tau_x_min,tau_x_max,tau_y_min,tau_y_max,tau_z_min,tau_z_max,center_true,R_true,r_true,S0,ana_S,1,ratio1,device)
         S_num_store.append(S_test_num)
         S_basis_store.append(S_basis)
         S_l2.append(S_l_21)
-        current_w = w_store[:,0]
         w_.append(current_w)
         if i>=1:
             if np.linalg.norm(S_test_num-S_num_store[i-1])/np.linalg.norm(S_test_num)<delta:

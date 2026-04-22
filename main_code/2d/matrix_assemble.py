@@ -12,13 +12,15 @@ def _unwrap_model(model):
     current = model
     while isinstance(current, (list, tuple)):
         if not current:
-            raise ValueError("Empty model container.")
+            return None
         current = current[0]
     return current
 
 
 def _call_model(model, all_g_p, af, *extra_args):
     resolved = _unwrap_model(model)
+    if resolved is None:
+        return None
     args = list(extra_args)
     while True:
         try:
@@ -28,6 +30,55 @@ def _call_model(model, all_g_p, af, *extra_args):
                 args.pop()
                 continue
             raise
+
+
+def _as_model_list(models):
+    if models is None:
+        return []
+    if isinstance(models, list) and not models:
+        return []
+    if isinstance(models, tuple):
+        if not models:
+            return []
+        return list(models)
+    if isinstance(models, list):
+        if not models:
+            return []
+        if len(models) == 1 and isinstance(models[0], (list, tuple)):
+            return list(models[0])
+        return models
+    return [models]
+
+
+def _as_shape_list(shapes, n):
+    if isinstance(shapes, str):
+        return [shapes] * n
+    if shapes in (None, []):
+        return [[] for _ in range(n)]
+    if isinstance(shapes, tuple):
+        shapes = list(shapes)
+    if isinstance(shapes, list):
+        if len(shapes) == n:
+            return shapes
+        if len(shapes) == 1:
+            return shapes * n
+    return [shapes for _ in range(n)]
+
+
+def _as_signed_distance_list(sign_distances):
+    if isinstance(sign_distances, tuple):
+        return list(sign_distances)
+    if isinstance(sign_distances, list):
+        return sign_distances
+    return [sign_distances]
+
+
+def _first_signed_distance(sign_distances):
+    if isinstance(sign_distances, (list, tuple)):
+        if not sign_distances:
+            return sign_distances
+        return sign_distances[0]
+    return sign_distances
 
 
 def _is_radial_boundary(points_b):
@@ -116,17 +167,51 @@ def _assemble_signed_basis(models0, models1, models2, models3, all_g_p, af, shap
     if isinstance(sign_distances, np.ndarray):
         sign_distances = torch.tensor(sign_distances).to(device)
 
+    if af == "mix_general":
+        basis_list = []
+        tanh_basis = _call_model(models0, all_g_p, "Tanh", [], [])
+        if tanh_basis is not None:
+            basis_list.append(tanh_basis)
+
+        extra_models = _as_model_list(models1)
+        extra_shapes = _as_shape_list(shape1, len(extra_models))
+        if not extra_models:
+            extra_models = _as_model_list(models2) + _as_model_list(models3)
+            extra_shapes = _as_shape_list(shape2, len(extra_models))
+        signed_distance_list = _as_signed_distance_list(sign_distances)
+        signed_idx = 0
+        for model, shape in zip(extra_models, extra_shapes):
+            if shape == "general":
+                if signed_idx >= len(signed_distance_list):
+                    raise ValueError("Not enough signed-distance arrays for general basis branches.")
+                basis = _call_model(model, all_g_p, "sigmoid", "general", signed_distance_list[signed_idx])
+                signed_idx += 1
+            else:
+                basis = _call_model(model, all_g_p, "sigmoid", shape, [])
+            if basis is not None:
+                basis_list.append(basis)
+        return torch.cat(tuple(basis_list), dim=1)
+
     if af == "mix+gauss":
+        basis_list = []
         out_cell00 = _call_model(models0, all_g_p, "Tanh", [], [])
         out_cell01 = _call_model(models1, all_g_p, "sigmoid", shape1, sign_distances)
         out_cell02 = _call_model(models2, all_g_p, "sigmoid", shape2, [])
         out_cell03 = _call_model(models3, all_g_p, "continue_gauss", [], [])
-        return torch.cat((out_cell00, out_cell01, out_cell02, out_cell03), dim=1)
+        for basis in (out_cell00, out_cell01, out_cell02, out_cell03):
+            if basis is not None:
+                basis_list.append(basis)
+        return torch.cat(tuple(basis_list), dim=1)
     if af == "mix":
+        basis_list = []
+        sign_distances_single = _first_signed_distance(sign_distances)
         out_cell00 = _call_model(models0, all_g_p, "Tanh", [], [])
-        out_cell01 = _call_model(models1, all_g_p, "sigmoid", shape1, sign_distances)
+        out_cell01 = _call_model(models1, all_g_p, "sigmoid", shape1, sign_distances_single)
         out_cell02 = _call_model(models2, all_g_p, "sigmoid", shape2, [])
-        return torch.cat((out_cell00, out_cell01, out_cell02), dim=1)
+        for basis in (out_cell00, out_cell01, out_cell02):
+            if basis is not None:
+                basis_list.append(basis)
+        return torch.cat(tuple(basis_list), dim=1)
     if af == "circle+rec":
         out_cell01 = _call_model(models1, all_g_p, "sigmoid", shape1, [])
         out_cell02 = _call_model(models2, all_g_p, "sigmoid", shape2, [])

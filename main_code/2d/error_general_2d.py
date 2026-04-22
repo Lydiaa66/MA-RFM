@@ -11,6 +11,34 @@ np.random.seed(2)
 plt.rcParams["font.family"] = "DejaVu Serif"
 
 
+def _heatmap_on_axis(ax, data, title, x_min, x_max, y_min, y_max, xlabel="x1", ylabel="x2", cmap="rainbow", n_ticks=5):
+    sns.heatmap(data.T, cmap=cmap, cbar=True, ax=ax)
+    ax.invert_yaxis()
+    ax.set_title(title, fontsize=14, pad=10)
+    ax.set_xlabel(xlabel, fontsize=12)
+    ax.set_ylabel(ylabel, fontsize=12)
+
+    x_labels = np.round(np.linspace(x_min, x_max, n_ticks), decimals=2)
+    y_labels = np.round(np.linspace(y_min, y_max, n_ticks), decimals=2)
+    ax.set_xticks(np.linspace(0, data.shape[0], n_ticks))
+    ax.set_xticklabels(x_labels, rotation=0, fontsize=9)
+    ax.set_yticks(np.linspace(0, data.shape[1], n_ticks))
+    ax.set_yticklabels(y_labels, fontsize=9)
+    ax.set_aspect("equal", adjustable="box")
+
+
+def _jump_plot_on_axis(ax, S_num_0, S_true_0, x_min, x_max, n_ticks=7):
+    ax.plot(range(int(len(S_num_0))), S_num_0, linestyle="--", color="red", label="Numerical Solution")
+    ax.plot(range(int(len(S_true_0))), S_true_0, linestyle="-", color="blue", label="Exact Solution")
+    ax.set_title("1D Slice", fontsize=14, pad=10)
+    ax.set_xlabel("x1", fontsize=12)
+    ax.legend(fontsize=8)
+    x_labels = np.round(np.linspace(x_min, x_max, n_ticks), decimals=2)
+    ax.set_xticks(np.linspace(0, len(S_num_0) - 1, n_ticks))
+    ax.set_xticklabels(x_labels, rotation=0, fontsize=9)
+    ax.grid(True, alpha=0.3)
+
+
 def _unwrap_model(model):
     while isinstance(model, (list, tuple)):
         if len(model) == 0:
@@ -37,6 +65,59 @@ def _call_model(model, batch_x, af, *extras):
         except TypeError as exc:
             last_error = exc
     raise last_error
+
+
+def _as_model_list(models):
+    if models is None:
+        return []
+    if isinstance(models, list) and not models:
+        return []
+    if isinstance(models, tuple):
+        if not models:
+            return []
+        return list(models)
+    if isinstance(models, list):
+        if len(models) == 1 and isinstance(models[0], (list, tuple)):
+            return list(models[0])
+        return models
+    return [models]
+
+
+def _as_shape_list(shapes, n):
+    if isinstance(shapes, str):
+        return [shapes] * n
+    if shapes is None or shapes == []:
+        return [[] for _ in range(n)]
+    if isinstance(shapes, tuple):
+        shapes = list(shapes)
+    if isinstance(shapes, list):
+        if len(shapes) == n:
+            return shapes
+        if len(shapes) == 1:
+            return shapes * n
+    return [shapes for _ in range(n)]
+
+
+def _as_signed_distance_list(sign_distances):
+    if isinstance(sign_distances, tuple):
+        return list(sign_distances)
+    if isinstance(sign_distances, list):
+        return sign_distances
+    return [sign_distances]
+
+
+def _first_signed_distance(sign_distances):
+    if isinstance(sign_distances, (list, tuple)):
+        if not sign_distances:
+            return sign_distances
+        return sign_distances[0]
+    return sign_distances
+
+
+def _slice_signed_distance(signed_distance, start_idx, end_idx, dtype, device):
+    if isinstance(signed_distance, np.ndarray):
+        return torch.tensor(signed_distance[start_idx:end_idx, :], dtype=dtype).to(device)
+    return signed_distance
 
 
 def test_p(Qx, Qy, x_min, x_max, y_min, y_max):
@@ -266,7 +347,36 @@ def test(*args):
                     del af_basis
 
             else:
-                if af == "mix+gauss":
+                if af == "mix_general":
+                    basis_list = []
+                    basis_0 = _call_model(models0, batch_x, "Tanh", [], [])
+                    if basis_0 is not None:
+                        basis_list.append(basis_0.to(device))
+
+                    extra_models = _as_model_list(models1)
+                    extra_shapes = _as_shape_list(Shape1, len(extra_models))
+                    if not extra_models:
+                        extra_models = _as_model_list(models2) + _as_model_list(models3)
+                        extra_shapes = _as_shape_list(Shape2, len(extra_models))
+                    signed_distance_list = _as_signed_distance_list(sign_distances)
+                    signed_idx = 0
+                    for model, shape in zip(extra_models, extra_shapes):
+                        if shape == "general":
+                            if signed_idx >= len(signed_distance_list):
+                                raise ValueError("Not enough signed-distance arrays for general basis branches.")
+                            sign_distances_loc = _slice_signed_distance(
+                                signed_distance_list[signed_idx], start_idx, end_idx, test_point.dtype, device
+                            )
+                            basis = _call_model(model, batch_x, "sigmoid", "general", sign_distances_loc)
+                            signed_idx += 1
+                        else:
+                            basis = _call_model(model, batch_x, "sigmoid", shape, [])
+                        if basis is not None:
+                            basis_list.append(basis.to(device))
+                    af_basis = torch.cat(tuple(basis_list), dim=1)
+                    batch_output = torch.mm(af_basis, w)
+                    del af_basis, basis_list
+                elif af == "mix+gauss":
                     if isinstance(sign_distances, np.ndarray):
                         sign_distances_loc = torch.tensor(sign_distances[start_idx:end_idx, :], dtype=test_point.dtype).to(device)
                     else:
@@ -279,10 +389,8 @@ def test(*args):
                     batch_output = torch.mm(af_basis, w)
                     del basis_0, basis_1, basis_2, basis_3, af_basis
                 elif af == "mix":
-                    if isinstance(sign_distances, np.ndarray):
-                        sign_distances_loc = torch.tensor(sign_distances[start_idx:end_idx, :], dtype=test_point.dtype).to(device)
-                    else:
-                        sign_distances_loc = sign_distances
+                    sign_distances_single = _first_signed_distance(sign_distances)
+                    sign_distances_loc = _slice_signed_distance(sign_distances_single, start_idx, end_idx, test_point.dtype, device)
                     basis_list = []
                     if _unwrap_model(models0) is not None:
                         basis_list.append(_call_model(models0, batch_x, "Tanh", [], []).to(device))
@@ -339,7 +447,6 @@ def test(*args):
         # else:
         #     g_S[g_S > 500] = 0
         g_S = g_S.reshape(test_Qx + 1, test_Qy + 1)
-        visual.improved_plot(g_S, title="gradient_S", x_min=x_min, x_max=x_max, y_min=y_min, y_max=y_max, cmap="rainbow")
         del w, test_point
     else:
         g_S = []
@@ -355,26 +462,58 @@ def test(*args):
     S_o = math.sqrt(np.sum(S_true**2) / length)
     S_l_inf = S_epsilon.max() / S_o
     S_l_2 = math.sqrt(np.sum(S_epsilon**2) / length) / S_o
-    print("S_l_inf=", S_l_inf, "S_L_2=", math.sqrt(np.sum(S_epsilon**2) / length), "S_l_2=", S_l_2)
+    summary_text = (
+        "S_l_inf= "
+        + str(S_l_inf)
+        + " S_L_2= "
+        + str(math.sqrt(np.sum(S_epsilon**2) / length))
+        + " S_l_2= "
+        + str(S_l_2)
+    )
 
+    plot_items = []
+    if grad_temp == 1:
+        plot_items.append("grad")
     if temp:
-        visual.improved_plot(S_num, title="Numerical Solution of S", x_min=x_min, x_max=x_max, y_min=y_min, y_max=y_max, cmap="rainbow")
-
+        plot_items.append("temp")
     if jump:
-        plt.figure(figsize=(5, 3), dpi=120)
-        plt.plot(range(int(S_num.shape[1])), S_num_0, linestyle="--", color="red", label="Numerical Solution")
-        plt.plot(range(int(S_true.shape[1])), S_true_0, linestyle="-", color="blue", label="Exact Solution")
-        plt.legend(fontsize=6)
-        plt.xlabel("x1", fontsize=14)
-        n_ticks = 7
-        x_labels = np.linspace(x_min, x_max, n_ticks)
-        y_labels = np.linspace(y_min, y_max, n_ticks)
-        x_labels = np.round(x_labels, decimals=2)
-        y_labels = np.round(y_labels, decimals=2)
-        plt.xticks(ticks=np.linspace(0, S_num.shape[1] - 1, n_ticks), labels=x_labels, rotation=0, fontsize=10)
-        plt.grid()
+        plot_items.append("jump")
+
+    if plot_items:
+        fig, axes = plt.subplots(1, len(plot_items), figsize=(4.8 * len(plot_items), 3.8), dpi=120)
+        if len(plot_items) == 1:
+            axes = [axes]
+
+        for ax, item in zip(axes, plot_items):
+            if item == "grad":
+                _heatmap_on_axis(
+                    ax,
+                    g_S,
+                    title="gradient_S",
+                    x_min=x_min,
+                    x_max=x_max,
+                    y_min=y_min,
+                    y_max=y_max,
+                    cmap="rainbow",
+                )
+            elif item == "temp":
+                _heatmap_on_axis(
+                    ax,
+                    S_num,
+                    title="Numerical Solution of S",
+                    x_min=x_min,
+                    x_max=x_max,
+                    y_min=y_min,
+                    y_max=y_max,
+                    cmap="rainbow",
+                )
+            elif item == "jump":
+                _jump_plot_on_axis(ax, S_num_0, S_true_0, x_min, x_max)
+
         plt.tight_layout()
         plt.show()
+
+    print(summary_text)
 
     if mode == "ex41":
         return S_num, S_true, S_l_inf, S_l_2

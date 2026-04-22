@@ -20,6 +20,24 @@ def _ordered_bounds_if_set(a, b):
     return _ordered_bounds(a, b)
 
 
+def _is_axis_triplet(value):
+    return isinstance(value, (list, tuple)) and len(value) == 3
+
+
+def _ordered_axis_bounds_if_set(a, b):
+    if _is_empty(a) or _is_empty(b):
+        return a, b
+    if not (_is_axis_triplet(a) and _is_axis_triplet(b)):
+        raise ValueError("Ellipsoid axis bounds must be length-3 tuples/lists.")
+    mins = []
+    maxs = []
+    for ai, bi in zip(a, b):
+        lo, hi = _ordered_bounds(ai, bi)
+        mins.append(lo)
+        maxs.append(hi)
+    return tuple(mins), tuple(maxs)
+
+
 def weights_init(m, R_m, b_min, b_max):
     if not isinstance(m, nn.Linear):
         return
@@ -68,6 +86,7 @@ class local_rep(nn.Module):
         R_m_for_init=None,
         af=None,
         Shape=None,
+        torus_axis=2,
         device=None,
     ):
         super(local_rep, self).__init__()
@@ -85,6 +104,7 @@ class local_rep(nn.Module):
         self.M = M
         self.af = af
         self.Shape = Shape
+        self.torus_axis = int(torus_axis)
         self.a = torch.tensor(
             [2.0 / (x_max - x_min), 2.0 / (y_max - y_min), 2.0 / (z_max - z_min)]
         )
@@ -108,7 +128,12 @@ class local_rep(nn.Module):
         b1_min, b1_max = _ordered_bounds(b1_min, b1_max)
         b2_min, b2_max = _ordered_bounds(b2_min, b2_max)
         b3_min, b3_max = _ordered_bounds(b3_min, b3_max)
-        r_min, r_max = _ordered_bounds_if_set(r_min, r_max)
+        ellipsoid_shape = self.Shape == "ellipsoid" and self.af in {"sigmoid", "relu", "Gauss"}
+        if ellipsoid_shape:
+            axis_min, axis_max = _ordered_axis_bounds_if_set(r_min, r_max)
+        else:
+            r_min, r_max = _ordered_bounds_if_set(r_min, r_max)
+            axis_min, axis_max = None, None
         R_min, R_max = _ordered_bounds_if_set(R_min, R_max)
         K_min, K_max = _ordered_bounds_if_set(K_min, K_max)
         v_min, v_max = _ordered_bounds_if_set(v_min, v_max)
@@ -135,13 +160,23 @@ class local_rep(nn.Module):
             weights_init(self.hidden_layer_1[0], R_m=R_m_for_init, b_min=b1_min, b_max=b1_max)
             weights_init(self.hidden_layer_2[0], R_m=R_m_for_init, b_min=b2_min, b_max=b2_max)
             weights_init(self.hidden_layer_3[0], R_m=R_m_for_init, b_min=b3_min, b_max=b3_max)
-            self.r_values = torch.empty(self.M, dtype=torch.float64).uniform_(r_min, r_max)
+            if ellipsoid_shape:
+                self.axis1_values = torch.empty(self.M, dtype=torch.float64).uniform_(axis_min[0], axis_max[0])
+                self.axis2_values = torch.empty(self.M, dtype=torch.float64).uniform_(axis_min[1], axis_max[1])
+                self.axis3_values = torch.empty(self.M, dtype=torch.float64).uniform_(axis_min[2], axis_max[2])
+            else:
+                self.r_values = torch.empty(self.M, dtype=torch.float64).uniform_(r_min, r_max)
             self.K = torch.empty(self.M, dtype=torch.float64).uniform_(K_min, K_max)
         elif self.af == "Gauss":
             weights_init(self.hidden_layer_1[0], R_m=R_m_for_init, b_min=b1_min, b_max=b1_max)
             weights_init(self.hidden_layer_2[0], R_m=R_m_for_init, b_min=b2_min, b_max=b2_max)
             weights_init(self.hidden_layer_3[0], R_m=R_m_for_init, b_min=b3_min, b_max=b3_max)
-            self.r_values = torch.empty(self.M, dtype=torch.float64).uniform_(r_min, r_max)
+            if ellipsoid_shape:
+                self.axis1_values = torch.empty(self.M, dtype=torch.float64).uniform_(axis_min[0], axis_max[0])
+                self.axis2_values = torch.empty(self.M, dtype=torch.float64).uniform_(axis_min[1], axis_max[1])
+                self.axis3_values = torch.empty(self.M, dtype=torch.float64).uniform_(axis_min[2], axis_max[2])
+            else:
+                self.r_values = torch.empty(self.M, dtype=torch.float64).uniform_(r_min, r_max)
             self.K = torch.empty(self.M, dtype=torch.float64).uniform_(K_min, K_max)
             self.gauss_scale_exp = torch.empty(self.M, dtype=torch.float64).uniform_(v_min, v_max)
         else:
@@ -151,6 +186,39 @@ class local_rep(nn.Module):
                 b_min=-R_m_for_init,
                 b_max=R_m_for_init,
             )
+
+    def _ellipsoid_metric(self, x):
+        self.axis1_values = self.axis1_values.to(self.device)
+        self.axis2_values = self.axis2_values.to(self.device)
+        self.axis3_values = self.axis3_values.to(self.device)
+        y1 = self.hidden_layer_1(x[..., 0:1])
+        y2 = self.hidden_layer_2(x[..., 1:2])
+        y3 = self.hidden_layer_3(x[..., 2:3])
+        axis1 = torch.clamp(self.axis1_values.repeat(y1.shape[0], 1), min=1e-12)
+        axis2 = torch.clamp(self.axis2_values.repeat(y1.shape[0], 1), min=1e-12)
+        axis3 = torch.clamp(self.axis3_values.repeat(y1.shape[0], 1), min=1e-12)
+        metric_sq = (y1 / axis1) ** 2 + (y2 / axis2) ** 2 + (y3 / axis3) ** 2
+        metric = torch.sqrt(metric_sq)
+        return metric, metric_sq
+
+    def _sweet_metric(self, x):
+        self.r_values = self.r_values.to(self.device)
+        self.R_values = self.R_values.to(self.device)
+        y1 = self.hidden_layer_1(x[..., 0:1])
+        y2 = self.hidden_layer_2(x[..., 1:2])
+        y3 = self.hidden_layer_3(x[..., 2:3])
+        if self.torus_axis == 0:
+            radial_1, radial_2, axial = y2, y3, y1
+        elif self.torus_axis == 1:
+            radial_1, radial_2, axial = y1, y3, y2
+        else:
+            radial_1, radial_2, axial = y1, y2, y3
+        rho = torch.sqrt(radial_1**2 + radial_2**2)
+        r = torch.clamp(self.r_values.repeat(y1.shape[0], 1), min=1e-12)
+        R = self.R_values.repeat(y1.shape[0], 1)
+        metric_sq = ((rho - R) / r) ** 2 + (axial / r) ** 2
+        metric = torch.sqrt(metric_sq)
+        return metric, metric_sq
 
     def forward(self, x, af, shape_or_device=None, device=None):
         if device is None and shape_or_device is not None and not isinstance(
@@ -176,21 +244,20 @@ class local_rep(nn.Module):
             return torch.tanh(y)
 
         if af == "sigmoid" and Shape == "sweet":
-            self.r_values = self.r_values.to(self.device)
-            self.R_values = self.R_values.to(self.device)
             self.K = self.K.to(self.device)
-            y1 = self.hidden_layer_1(x[..., 0:1])
-            y2 = self.hidden_layer_2(x[..., 1:2])
-            y3 = self.hidden_layer_3(x[..., 2:3])
-            r_hat = torch.sqrt(y1**2 + y2**2)
-            r = self.r_values.repeat(y1.shape[0], 1)
-            R = self.R_values.repeat(y1.shape[0], 1)
-            K = self.K.repeat(y1.shape[0], 1)
-            return torch.sigmoid(-K * ((r_hat - R) ** 2 + y3**2 - r**2))
+            metric, _ = self._sweet_metric(x)
+            K = self.K.repeat(metric.shape[0], 1)
+            return torch.sigmoid(K * (1.0 - metric))
 
         if af == "sigmoid" or af == "relu":
-            self.r_values = self.r_values.to(self.device)
             self.K = self.K.to(self.device)
+            if Shape == "ellipsoid":
+                metric, _ = self._ellipsoid_metric(x)
+                K = self.K.repeat(metric.shape[0], 1)
+                if af == "sigmoid":
+                    return torch.sigmoid(K * (1.0 - metric))
+                return torch.relu(K * (1.0 - metric))
+            self.r_values = self.r_values.to(self.device)
             y1 = self.hidden_layer_1(x[..., 0:1])
             y2 = self.hidden_layer_2(x[..., 1:2])
             y3 = self.hidden_layer_3(x[..., 2:3])
@@ -203,6 +270,10 @@ class local_rep(nn.Module):
 
         if af == "Gauss":
             self.gauss_scale_exp = self.gauss_scale_exp.to(self.device)
+            if Shape == "ellipsoid":
+                _, metric_sq = self._ellipsoid_metric(x)
+                gauss_scale_exp_b = self.gauss_scale_exp.repeat(metric_sq.shape[0], 1)
+                return torch.exp(gauss_scale_exp_b * metric_sq)
             y1 = self.hidden_layer_1(x[..., 0:1])
             y2 = self.hidden_layer_2(x[..., 1:2])
             y3 = self.hidden_layer_3(x[..., 2:3])
