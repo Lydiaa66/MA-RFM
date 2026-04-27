@@ -42,7 +42,7 @@ def _resolve_field_array(field, name):
     return _resolve_field_array(np.asarray(field), name)
 
 
-def map_index_to_domain(points, tau_x_min, tau_x_max, tau_y_min, tau_y_max, shape): # 将网格索引映射到实际物理域
+def map_index_to_domain(points, tau_x_min, tau_x_max, tau_y_min, tau_y_max, shape):
     """Map grid indices to the physical 2D domain."""
     x_scale = (tau_x_max - tau_x_min) / shape[1]
     y_scale = (tau_y_max - tau_y_min) / shape[0]
@@ -53,7 +53,7 @@ def map_index_to_domain(points, tau_x_min, tau_x_max, tau_y_min, tau_y_max, shap
     return mapped_points
 
 
-def _estimate_grid_spacing(X, Y): #估计网络间距
+def _estimate_grid_spacing(X, Y):
     x_unique = np.unique(np.asarray(X, dtype=float).ravel())
     y_unique = np.unique(np.asarray(Y, dtype=float).ravel())
     dx_candidates = np.diff(x_unique)
@@ -65,7 +65,7 @@ def _estimate_grid_spacing(X, Y): #估计网络间距
     return max(dx, dy)
 
 
-def _resolve_dbscan_eps(eps, X, Y, eps_mode): #根据mode解析DBSCAN的eps参数
+def _resolve_dbscan_eps(eps, X, Y, eps_mode):
     if eps_mode not in {"auto", "absolute", "grid_scaled"}:
         raise ValueError(f"Unsupported eps_mode: {eps_mode}")
 
@@ -83,7 +83,7 @@ def _resolve_dbscan_eps(eps, X, Y, eps_mode): #根据mode解析DBSCAN的eps参�
     return float(eps), h, "absolute"
 
 
-def get_contour_points_from_implicit(implicit_func, func_args, x_range, y_range, grid_points=300): #从隐函数生成轮廓点
+def get_contour_points_from_implicit(implicit_func, func_args, x_range, y_range, grid_points=300):
     x_grid = np.linspace(x_range[0], x_range[1], grid_points)
     y_grid = np.linspace(y_range[0], y_range[1], grid_points)
     X_contour, Y_contour = np.meshgrid(x_grid, y_grid)
@@ -98,24 +98,24 @@ def get_contour_points_from_implicit(implicit_func, func_args, x_range, y_range,
     return contour_points
 
 
-def generate_soft_boundary(x_grid, y_grid, contour_points, K=500): #基于sigmoid生成平滑软边界
-    boundary_tree = cKDTree(contour_points) #建立KD树用于距离查询
-    path = mpath.Path(contour_points) #路径对象
+def generate_soft_boundary(x_grid, y_grid, contour_points, K=500):
+    boundary_tree = cKDTree(contour_points)
+    path = mpath.Path(contour_points)
     grid_points = np.vstack([x_grid.ravel(), y_grid.ravel()]).T
-    distances, _ = boundary_tree.query(grid_points, k=1) #查询最近距离
-    are_inside = path.contains_points(grid_points) #判断点是否在轮廓内
-    signed_distances = np.where(are_inside, -distances, distances) #内正外负
-    z_flat = 1 / (1 + np.exp(K * signed_distances)) # Sigmoid映射生成平滑边界值
+    distances, _ = boundary_tree.query(grid_points, k=1)
+    are_inside = path.contains_points(grid_points)
+    signed_distances = np.where(are_inside, -distances, distances)
+    z_flat = 1 / (1 + np.exp(K * signed_distances))
     return z_flat.reshape(x_grid.shape)
 
 
 def resample_closed_curve(points, n_points=1200):
-    """按弧长重采样闭合边界，避免 cv2 像素轮廓过密导致样条打结。"""
+    """Resample a closed boundary by arc length."""
     points = np.asarray(points, dtype=float)
     if points.ndim != 2 or points.shape[1] != 2:
         raise ValueError(f"points must have shape (N, 2), got {points.shape}")
 
-    # 去掉连续重复点，splprep 对重复点很敏感。
+    # Remove consecutive duplicates before spline fitting.
     keep = np.ones(len(points), dtype=bool)
     keep[1:] = np.linalg.norm(np.diff(points, axis=0), axis=1) > 1e-12
     points = points[keep]
@@ -140,25 +140,19 @@ def resample_closed_curve(points, n_points=1200):
     return np.column_stack((x_new, y_new))
 
 
-def simple_offset_batch(points, s, distances, n_resample=1200): # 根据曲线生成平滑偏移点集
-#    '''
-#    points:原始曲线的(N,2)点集
-#    s：样条平滑参数，控制曲线光滑程度
-#    distances：偏移距离，可以是单个值或多个值 
-#    '''
+def simple_offset_batch(points, s, distances, n_resample=1200):
     points = resample_closed_curve(points, n_points=n_resample)
-    # splprep 的 s 是全局残差上界；轮廓点数增加后，固定 s 会过度贴合像素锯齿。
-    # 这里把原来的 s 解释为每个点的平滑强度，保持 notebook 参数量级不变。
+    # Interpret s as a per-point smoothing strength to keep legacy notebook scales stable.
     smoothing = float(s) * len(points)
-    tck, _ = splprep([points[:, 0], points[:, 1]], s=smoothing, per=True) # 构建闭合样条曲线
-    u_new = np.linspace(0, 1, len(points), endpoint=False) # 等间距参数
+    tck, _ = splprep([points[:, 0], points[:, 1]], s=smoothing, per=True)
+    u_new = np.linspace(0, 1, len(points), endpoint=False)
 
-    der1 = np.array(splev(u_new, tck, der=1)).T # 求切向量
+    der1 = np.array(splev(u_new, tck, der=1)).T
     tangent_norm = np.linalg.norm(der1, axis=1)
-    tangent_norm[tangent_norm < 1e-12] = 1e-12 # 防止除零
-    unit_tangent = der1 / tangent_norm[:, np.newaxis] # 单位切向量
-    unit_normal = np.c_[-unit_tangent[:, 1], unit_tangent[:, 0]]  # 单位法向量
-    smooth_points = np.array(splev(u_new, tck)).T #样条曲线上对应参数点的平滑坐标
+    tangent_norm[tangent_norm < 1e-12] = 1e-12
+    unit_tangent = der1 / tangent_norm[:, np.newaxis]
+    unit_normal = np.c_[-unit_tangent[:, 1], unit_tangent[:, 0]]
+    smooth_points = np.array(splev(u_new, tck)).T
 
     distances = np.atleast_1d(distances)
     if len(distances) == 1:
@@ -215,7 +209,7 @@ def generate_signed_distance(
     center=None,
     center_oriented=False,
     n_resample=1200,
-): #生成距离函数
+):
     if hasattr(x_train, "detach") and hasattr(x_train, "cpu"):
         grid_points = x_train.detach().cpu().numpy()
     else:
@@ -231,13 +225,13 @@ def generate_signed_distance(
             n_resample=n_resample,
         )
     else:
-        bound_num_scaled = simple_offset_batch(boundary_points, alpha, scale_factor, n_resample=n_resample) #生成偏移曲线
+        bound_num_scaled = simple_offset_batch(boundary_points, alpha, scale_factor, n_resample=n_resample)
 
     signed_distances = np.zeros((grid_points.shape[0], M), dtype=np.float64)
     for i in range(M):
-        path = mpath.Path(bound_num_scaled[i, :, :]) #构建路径对象
-        are_inside = path.contains_points(grid_points, radius=-1e-9) # 判断是否在轮廓内
-        signed_distances[:, i : i + 1] = np.where(are_inside, 1, -1).reshape(-1, 1) # 内部=1，外部=-1
+        path = mpath.Path(bound_num_scaled[i, :, :])
+        are_inside = path.contains_points(grid_points, radius=-1e-9)
+        signed_distances[:, i : i + 1] = np.where(are_inside, 1, -1).reshape(-1, 1)
     return bound_num_scaled, signed_distances
 
 
@@ -315,7 +309,7 @@ def detect_boundary(points):
     return _fallback_hull_boundary(points)
 
 
-def dist_to_axis_aligned_rect(points, center, width, height): #计算eps_rect
+def dist_to_axis_aligned_rect(points, center, width, height):
     p_local = np.abs(points - center)
     a = max(width / 2, 1e-6)
     b = max(height / 2, 1e-6)
@@ -323,7 +317,7 @@ def dist_to_axis_aligned_rect(points, center, width, height): #计算eps_rect
     return np.mean(np.abs(metric - 1))
 
 
-def dist_to_axis_aligned_ellipsoid(points, center, width, height): #计算eps_ellip
+def dist_to_axis_aligned_ellipsoid(points, center, width, height):
     p_local = points - center
     a = max(width / 2, 1e-6)
     b = max(height / 2, 1e-6)
@@ -419,7 +413,7 @@ def _filter_clusters(segmented_results, min_cluster_size=None, min_relative_abs_
         size = len(points)
         mean_abs_s = float(np.mean(np.abs(s_vals))) if size > 0 else 0.0
         mean_grad = float(np.mean(g_vals)) if size > 0 else 0.0
-        score = float(size * mean_abs_s * mean_grad) #计算每个簇的综合评分
+        score = float(size * mean_abs_s * mean_grad)
 
         metrics.append(
             {
@@ -431,11 +425,11 @@ def _filter_clusters(segmented_results, min_cluster_size=None, min_relative_abs_
             }
         )
 
-    max_mean_abs_s = max((item["mean_abs_s"] for item in metrics), default=0.0) #找到所有簇中mean_grad,mean_abs_s最大值，用于相对阈值过滤
+    max_mean_abs_s = max((item["mean_abs_s"] for item in metrics), default=0.0)
     max_mean_grad = max((item["mean_grad"] for item in metrics), default=0.0)
 
     kept = []
-    for item in metrics: #pass簇
+    for item in metrics:
         if min_cluster_size is not None and item["size"] < min_cluster_size:
             continue
         if max_mean_abs_s > 0 and item["mean_abs_s"] < min_relative_abs_s * max_mean_abs_s:
@@ -444,7 +438,7 @@ def _filter_clusters(segmented_results, min_cluster_size=None, min_relative_abs_
             continue
         kept.append(item)
 
-    if keep_top_k is not None and len(kept) > keep_top_k: #选前keep_top_k个
+    if keep_top_k is not None and len(kept) > keep_top_k:
         kept = sorted(kept, key=lambda item: item["score"], reverse=True)[:keep_top_k]
 
     kept_indices = {item["index"] for item in kept}

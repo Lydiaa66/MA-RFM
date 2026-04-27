@@ -11,13 +11,15 @@ MA-RFM/
 │   └── 3d/                 # Shared 3D implementation
 ├── Ex4.1/                  # 2D baseline experiment
 ├── Ex4.2/                  # 2D IA-RFM experiments
-├── Ex4.3/                  # 2D MA-RFM experiment with a rectangle/circle source
+├── Ex4.3/                  # 2D single-source MA-RFM experiment
 ├── Ex4.4/                  # 2D two-source experiment
 ├── Ex4.5/                  # 2D sensitivity and noise experiments
 ├── Ex4.6/                  # 2D general-shape/kidney experiment
-├── Ex4.7/                  # 3D multi-source experiment
-├── 3D_donut/               # 3D torus/donut experiment
-└── limited_aperture/       # Limited-aperture experiments
+├── Ex4.7/                  # 2D multi-component irregular-source experiment
+├── Ex4.8/                  # 3D two-source experiment
+├── Ex4.9/                  # 3D torus/donut experiment
+├── limited_aperture/       # Limited-aperture experiment notebooks
+└── response/               # Reviewer response materials
 ```
 
 The reusable code is organized under `main_code/2d` and `main_code/3d`.  The experiment folders contain Jupyter notebooks and saved numerical results used to reproduce the examples.
@@ -96,7 +98,7 @@ These two settings should refer to the same GPU.  If `device` is `cuda:1`, set `
 
 The experiments are organized as notebooks.  A typical workflow is:
 
-1. Open the notebook in the desired example folder, such as `Ex4.5/Noise_MA_RFM_5%.ipynb` or `3D_donut/MA_RFM_5%.ipynb`.
+1. Open the notebook in the desired example folder, such as `Ex4.5/Noise_MA_RFM_5%.ipynb` or `Ex4.9/MA_RFM_5%.ipynb`.
 2. Make sure the notebook appends the correct module path, for example `../main_code/2d` or `../main_code/3d`.
 3. Select the correct `device` and `cupy_device`.
 4. Run the data-generation cells if the required `.npy` data are not already present.
@@ -108,10 +110,12 @@ Important entry points:
 ```text
 Ex4.3/Noise_MA_RFM_5%.ipynb       2D rectangle/circle noisy MA-RFM example
 Ex4.4/Noise_MA_RFM_5%.ipynb       2D two-source noisy MA-RFM example
-Ex4.5/senstivity_5%.ipynb         Parameter sensitivity study
+Ex4.5/shape_threshold_sensitivity_5%.ipynb  Shape-threshold sensitivity study
 Ex4.6/MA_RFM_5%.ipynb             2D general-shape/kidney example
-Ex4.7/MA_RFM_5%.ipynb             3D multi-source example
-3D_donut/MA_RFM_5%.ipynb          3D torus/donut example
+Ex4.7/MA_RFM_5%.ipynb             2D irregular multi-component example
+Ex4.8/MA_RFM_5%.ipynb             3D two-source example
+Ex4.9/MA_RFM_5%.ipynb             3D torus/donut example
+limited_aperture/pi.ipynb         Limited-aperture reconstruction example
 ```
 
 ## Saved Results
