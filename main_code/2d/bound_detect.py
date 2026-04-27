@@ -5,7 +5,6 @@ import matplotlib.path as mpath
 from scipy.spatial import cKDTree, ConvexHull
 from scipy.interpolate import splprep, splev
 from sklearn.cluster import DBSCAN
-
 import cv2
 
 

@@ -1,0 +1,10 @@
+i,j,t_reg,t_cv,shape_summary,profile_summary,cluster_count,selected_idx,selected_lambda,S_l2,is_valid
+0,0,0.04,0.56,Ellipsoid+Rectangle,Ellipsoid(Sigmoid)+Rectangle(Sigmoid),2,4,1.000e-04,1.527e-01,True
+0,1,0.04,0.7,Ellipsoid+Rectangle,Ellipsoid(Sigmoid)+Rectangle(Sigmoid),2,4,1.000e-04,1.542e-01,True
+0,2,0.04,0.84,Ellipsoid+Rectangle,Ellipsoid(Sigmoid)+Rectangle(Sigmoid),2,4,1.000e-04,1.529e-01,True
+1,0,0.05,0.56,Ellipsoid+Rectangle,Ellipsoid(Sigmoid)+Rectangle(Sigmoid),2,4,1.000e-04,1.558e-01,True
+1,1,0.05,0.7,Ellipsoid+Rectangle,Ellipsoid(Sigmoid)+Rectangle(Sigmoid),2,4,1.000e-04,1.532e-01,True
+1,2,0.05,0.84,Ellipsoid+Rectangle,Ellipsoid(Sigmoid)+Rectangle(Sigmoid),2,4,1.000e-04,1.511e-01,True
+2,0,0.06,0.56,Ellipsoid+Rectangle,Ellipsoid(Sigmoid)+Rectangle(Sigmoid),2,4,1.000e-04,1.521e-01,True
+2,1,0.06,0.7,Ellipsoid+Rectangle,Ellipsoid(Sigmoid)+Rectangle(Sigmoid),2,4,1.000e-04,1.505e-01,True
+2,2,0.06,0.84,Ellipsoid+Rectangle,Ellipsoid(Sigmoid)+Rectangle(Sigmoid),2,4,1.000e-04,1.528e-01,True
