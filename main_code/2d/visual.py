@@ -3,6 +3,7 @@ import os
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
+from matplotlib.colors import LinearSegmentedColormap
 from matplotlib.ticker import FuncFormatter
 import numpy as np
 import seaborn as sns
@@ -15,6 +16,14 @@ try:
     import bound_detect
 except Exception:  # pragma: no cover - optional example dependency
     bound_detect = None
+
+
+CJET_CMAP = LinearSegmentedColormap.from_list(
+    "cjet",
+    plt.get_cmap("jet")(np.linspace(0, 1, 256)),
+    N=256,
+)
+PAPER_SEQUENTIAL_CMAP = CJET_CMAP
 
 
 def _get_bound_detect_module():
@@ -39,6 +48,14 @@ def kidney_curve(x, y, h, k, a):
     term1 = (x_shifted**2 + y_shifted**2 - 4 * a**2) ** 3
     term2 = 108 * a**4 * y_shifted**2
     return term1 - term2
+
+
+def _resolve_sequential_cmap(cmap=None):
+    if cmap is None:
+        return PAPER_SEQUENTIAL_CMAP
+    if isinstance(cmap, str) and cmap.lower() == "cjet":
+        return CJET_CMAP
+    return cmap
 
 
 def draw(
@@ -68,8 +85,7 @@ def draw(
         output_directory = "."
     if output_filename is None:
         output_filename = "plot.png"
-    if cmap is None:
-        cmap = "rainbow"
+    cmap = _resolve_sequential_cmap(cmap)
 
     if output_directory and not os.path.exists(output_directory):
         os.makedirs(output_directory)
@@ -90,6 +106,7 @@ def draw(
         vmin=np.nanmin(data),
         vmax=np.nanmax(data),
     )
+    ax = plt.gca()
 
     cbar = plt.colorbar(contour_fill, shrink=1, aspect=12)
     cbar.ax.tick_params(labelsize=colorbar_tick_size)
@@ -97,7 +114,6 @@ def draw(
     plt.xlabel(r"$x_1$", fontsize=label_size)
     plt.ylabel(r"$x_2$", fontsize=label_size)
     plt.tick_params(axis="both", which="major", labelsize=tick_size)
-    ax = plt.gca()
     formatter = FuncFormatter(lambda value, _: tick_format.format(value))
     ax.xaxis.set_major_formatter(formatter)
     ax.yaxis.set_major_formatter(formatter)
@@ -862,7 +878,7 @@ def plot_boundary_shrinking_and_noise_centers(
                 q_points[:, 0],
                 q_points[:, 1],
                 c=q_grad_vals,
-                cmap="viridis",
+                cmap=PAPER_SEQUENTIAL_CMAP,
                 s=5,
                 alpha=0.4,
                 label=r"$Q_{grad}$",
@@ -901,7 +917,7 @@ def plot_boundary_shrinking_and_noise_centers(
     }
 
 
-def improved_plot(data, title, x_min, x_max, y_min, y_max, xlabel="x1", ylabel="x2", cmap="plasma", n_ticks=5):
+def improved_plot(data, title, x_min, x_max, y_min, y_max, xlabel="x1", ylabel="x2", cmap=PAPER_SEQUENTIAL_CMAP, n_ticks=5):
     plt.figure(figsize=(3, 3), dpi=120)
     ax = sns.heatmap(data.T, cmap=cmap, cbar_kws={"shrink": 0.8}, cbar=False)
     plt.gca().invert_yaxis()
@@ -989,7 +1005,14 @@ class MeshVisualizer:
             p_np = points.cpu().detach().numpy() if hasattr(points, "cpu") else np.asarray(points)
             s_np = S_num.cpu().detach().numpy().flatten() if hasattr(S_num, "cpu") else np.asarray(S_num).flatten()
             if p_np.ndim == 2 and p_np.shape[0] >= 3 and p_np.shape[1] >= 2 and s_np.size == p_np.shape[0]:
-                contour = ax.tricontourf(p_np[:, 0], p_np[:, 1], s_np, levels=20, cmap="rainbow", alpha=0.9)
+                contour = ax.tricontourf(
+                    p_np[:, 0],
+                    p_np[:, 1],
+                    s_np,
+                    levels=20,
+                    cmap=PAPER_SEQUENTIAL_CMAP,
+                    alpha=0.95,
+                )
                 fig.colorbar(contour, ax=ax, label="Solution Value")
             else:
                 ax.text(0.5, 0.5, "Not enough points for contour plot", ha="center", va="center", transform=ax.transAxes)
@@ -1049,7 +1072,7 @@ class MeshVisualizer:
         grad_norm = np.linalg.norm(gradient, axis=1)
 
         if points.shape[0] >= 3:
-            contour1 = ax1.tricontourf(points[:, 0], points[:, 1], solution, levels=14, cmap="viridis", alpha=0.9)
+            contour1 = ax1.tricontourf(points[:, 0], points[:, 1], solution, levels=14, cmap=PAPER_SEQUENTIAL_CMAP, alpha=0.95)
             ax1.set_title("Numerical Solution $S_{num}$ Distribution")
             fig.colorbar(contour1, ax=ax1, label="Solution Value")
         else:
@@ -1060,7 +1083,7 @@ class MeshVisualizer:
         ax1.set_aspect("equal", adjustable="box")
 
         if points.shape[0] >= 3:
-            contour2 = ax2.tricontourf(points[:, 0], points[:, 1], grad_norm, levels=14, cmap="plasma", alpha=0.9)
+            contour2 = ax2.tricontourf(points[:, 0], points[:, 1], grad_norm, levels=14, cmap=PAPER_SEQUENTIAL_CMAP, alpha=0.95)
             ax2.set_title("Gradient Norm $||\\nabla S||$ Distribution")
             fig.colorbar(contour2, ax=ax2, label="Gradient Norm")
         else:
@@ -1182,7 +1205,14 @@ class GridMeshVisualizer:
         p_np = points.cpu().detach().numpy() if hasattr(points, "cpu") else np.asarray(points)
         s_np = S_num.cpu().detach().numpy().flatten() if hasattr(S_num, "cpu") else np.asarray(S_num).flatten()
         if p_np.ndim == 2 and p_np.shape[0] >= 3 and p_np.shape[1] >= 2 and s_np.size == p_np.shape[0]:
-            contour = ax.tricontourf(p_np[:, 0], p_np[:, 1], s_np, levels=20, cmap="rainbow", alpha=0.9)
+            contour = ax.tricontourf(
+                p_np[:, 0],
+                p_np[:, 1],
+                s_np,
+                levels=20,
+                cmap=PAPER_SEQUENTIAL_CMAP,
+                alpha=0.95,
+            )
             cbar = fig.colorbar(contour, ax=ax)
             cbar.ax.tick_params(labelsize=colorbar_size)
 
