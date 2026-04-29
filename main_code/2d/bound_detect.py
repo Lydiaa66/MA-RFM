@@ -1,11 +1,84 @@
 import os
+import re
+import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
 import matplotlib.path as mpath
+from matplotlib.ticker import FuncFormatter
 from scipy.spatial import cKDTree, ConvexHull
 from scipy.interpolate import splprep, splev
 from sklearn.cluster import DBSCAN
 import cv2
+
+
+mpl.rcParams["text.usetex"] = False
+plt.rcParams["text.usetex"] = False
+mpl.rcParams["mathtext.fontset"] = "cm"
+plt.rcParams["mathtext.fontset"] = "cm"
+mpl.rcParams["font.family"] = "serif"
+plt.rcParams["font.family"] = "serif"
+
+PAPER_SEQUENTIAL_CMAP = plt.get_cmap("viridis")
+PAPER_BOUNDARY_RED = "#ff3b30"
+PAPER_COLOR_LEVELS = 20
+VISUAL_MATCH_FIGSIZE = (8, 6)
+VISUAL_MATCH_LABEL_SIZE = 36
+VISUAL_MATCH_TICK_SIZE = 18
+VISUAL_MATCH_COLORBAR_TICK_SIZE = 18
+VISUAL_MATCH_TICK_FORMAT = "{:.2f}"
+VISUAL_MATCH_COLORBAR_TICK_FORMAT = "{:.2f}"
+VISUAL_MATCH_COLORBAR_SHRINK = 1
+VISUAL_MATCH_COLORBAR_ASPECT = 12
+EXAMPLE_DIR_PATTERN = re.compile(r"^Ex\d+\.\d+$", re.IGNORECASE)
+
+
+def _build_segmented_colormap_and_norm(vmin, vmax, n_levels=PAPER_COLOR_LEVELS):
+    if np.isclose(vmin, vmax):
+        boundaries = np.linspace(vmin - 0.5, vmax + 0.5, n_levels + 1)
+    else:
+        boundaries = np.linspace(vmin, vmax, n_levels + 1)
+    discrete_cmap = plt.get_cmap(PAPER_SEQUENTIAL_CMAP.name, n_levels)
+    norm = mpl.colors.BoundaryNorm(boundaries, discrete_cmap.N, clip=True)
+    return discrete_cmap, norm, boundaries
+
+
+def _make_tick_formatter(tick_format=VISUAL_MATCH_TICK_FORMAT):
+    return FuncFormatter(lambda value, _: tick_format.format(value))
+
+
+def _infer_example_prefix_from_path(path):
+    if not path:
+        return None
+    normalized = os.path.abspath(os.path.expanduser(str(path)))
+    for part in reversed(re.split(r"[\\/]+", normalized)):
+        if EXAMPLE_DIR_PATTERN.fullmatch(part):
+            return part.lower()
+    return None
+
+
+def _infer_example_prefix(*paths):
+    for path in paths:
+        prefix = _infer_example_prefix_from_path(path)
+        if prefix:
+            return prefix
+    return _infer_example_prefix_from_path(os.getcwd())
+
+
+def _prefix_filename_for_example(filename, *paths):
+    if not filename:
+        return filename
+    prefix = _infer_example_prefix(*paths)
+    if not prefix:
+        return filename
+    if filename.lower().startswith(prefix + "_"):
+        return filename
+    return f"{prefix}_{filename}"
+
+
+def _resolve_output_path(output_directory, output_filename):
+    directory = output_directory or "."
+    filename = _prefix_filename_for_example(output_filename, directory)
+    return os.path.join(directory, filename)
 
 
 def _resolve_field_array(field, name): 
@@ -449,7 +522,7 @@ def _filter_clusters(segmented_results, min_cluster_size=None, min_relative_abs_
 def _prepare_axes(fig, ax, tau_x_min, tau_x_max, tau_y_min, tau_y_max, style):
     created_fig = False
     if fig is None or ax is None:
-        figsize = (7.5, 7.5) if style == "paper" and tau_x_min < 0 else (7, 6)
+        figsize = (7.5, 7.5) if style == "paper" and tau_x_min < 0 else VISUAL_MATCH_FIGSIZE
         fig = plt.figure(figsize=figsize)
         ax = fig.add_subplot(111)
         created_fig = True
@@ -591,6 +664,7 @@ def detect_shape(
 
     all_s_vals = np.concatenate([cluster_info["S_vals"] for cluster_info in segmented_results])
     s_min, s_max = np.min(all_s_vals), np.max(all_s_vals)
+    segmented_cmap, segmented_norm, color_boundaries = _build_segmented_colormap_and_norm(s_min, s_max)
     results = []
     sc = None
     detected_boundary_label_used = False
@@ -689,13 +763,14 @@ def detect_shape(
             cluster_pts[:, 0],
             cluster_pts[:, 1],
             c=s_vals,
-            cmap="jet",
-            marker="o",
-            s=5,
-            edgecolor="white",
-            linewidth=0.5,
-            vmin=s_min,
-            vmax=s_max,
+            cmap=segmented_cmap,
+            norm=segmented_norm,
+            marker="s",
+            s=9,
+            edgecolor="none",
+            linewidth=0,
+            antialiased=False,
+            rasterized=True,
             zorder=2,
         )
 
@@ -733,10 +808,10 @@ def detect_shape(
                 plot_center,
                 2 * final_params["a"],
                 2 * final_params["b"],
-                edgecolor="m",
+                edgecolor=PAPER_BOUNDARY_RED,
                 facecolor="none",
                 linestyle="--",
-                linewidth=1.8,
+                linewidth=2.8,
                 zorder=8,
             )
             ax.add_patch(patch)
@@ -766,30 +841,45 @@ def detect_shape(
         ax.scatter(plot_center[0], plot_center[1], c="k", marker="x", s=marker_size, linewidths=2.0, zorder=6)
 
     if style != "paper" and sc is not None and show_colorbar:
-        cbar = fig.colorbar(sc, ax=ax, shrink=0.85)
-        cbar.ax.tick_params(labelsize=18)
-        cbar.set_label("S values", fontsize=18)
+        cbar = fig.colorbar(
+            sc,
+            ax=ax,
+            shrink=VISUAL_MATCH_COLORBAR_SHRINK,
+            aspect=VISUAL_MATCH_COLORBAR_ASPECT,
+            boundaries=color_boundaries,
+            spacing="proportional",
+        )
+        cbar.ax.tick_params(labelsize=VISUAL_MATCH_COLORBAR_TICK_SIZE)
+        cbar.ax.yaxis.set_major_formatter(_make_tick_formatter(VISUAL_MATCH_COLORBAR_TICK_FORMAT))
+        cbar.update_ticks()
+        colorbar_ticks = cbar.get_ticks()
+        cbar.set_ticks(colorbar_ticks)
+        cbar.set_ticklabels([VISUAL_MATCH_COLORBAR_TICK_FORMAT.format(tick) for tick in colorbar_ticks])
+        #cbar.set_label("S values", fontsize=18)
 
-    ax.set_xlabel(r"$x_1$", fontsize=40 if style == "paper" else 24)
+    ax.set_xlabel(r"$x_1$", fontsize=40 if style == "paper" else VISUAL_MATCH_LABEL_SIZE)
     if style != "paper":
-        ax.set_ylabel(r"$x_2$", fontsize=24)
-
-    n_ticks = 5
-    x_ticks_loc = np.linspace(tau_x_min, tau_x_max, n_ticks)
-    y_ticks_loc = np.linspace(tau_y_min, tau_y_max, n_ticks)
-    ax.set_xticks(x_ticks_loc)
-    ax.set_xticklabels(np.round(x_ticks_loc, decimals=3), rotation=0, fontsize=20 if style == "paper" else 18)
-    ax.set_yticks(y_ticks_loc)
+        ax.set_ylabel(r"$x_2$", fontsize=VISUAL_MATCH_LABEL_SIZE)
 
     if style == "paper":
+        n_ticks = 5
+        x_ticks_loc = np.linspace(tau_x_min, tau_x_max, n_ticks)
+        y_ticks_loc = np.linspace(tau_y_min, tau_y_max, n_ticks)
+        ax.set_xticks(x_ticks_loc)
+        ax.set_xticklabels(np.round(x_ticks_loc, decimals=3), rotation=0, fontsize=20)
+        ax.set_yticks(y_ticks_loc)
         ax.set_yticklabels(np.round(y_ticks_loc, decimals=3), fontsize=18)
         ax.set_yticks([])
     else:
-        ax.set_yticklabels(np.round(y_ticks_loc, decimals=3), fontsize=18)
+        formatter = _make_tick_formatter()
+        ax.tick_params(axis="both", which="major", labelsize=VISUAL_MATCH_TICK_SIZE)
+        ax.xaxis.set_major_formatter(formatter)
+        ax.yaxis.set_major_formatter(formatter)
 
     ax.set_xlim(tau_x_min, tau_x_max)
     ax.set_ylim(tau_y_min, tau_y_max)
     ax.set_aspect("equal", adjustable="box")
+    ax.set_facecolor("white")
 
     if ax.get_legend_handles_labels()[0]:
         ax.legend()
@@ -802,7 +892,7 @@ def detect_shape(
     elif not output_directory:
         output_directory = "."
 
-    full_output_path = os.path.join(output_directory, output_filename)
+    full_output_path = _resolve_output_path(output_directory, output_filename)
     fig.savefig(full_output_path, dpi=300, bbox_inches="tight")
 
     if created_fig:
