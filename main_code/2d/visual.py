@@ -1,16 +1,21 @@
 import os
+import re
 
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
-from matplotlib.colors import LinearSegmentedColormap
 from matplotlib.ticker import FuncFormatter
+from mpl_toolkits.axes_grid1 import make_axes_locatable
 import numpy as np
 import seaborn as sns
 
 
 mpl.rcParams["text.usetex"] = False
 plt.rcParams["text.usetex"] = False
+mpl.rcParams["mathtext.fontset"] = "cm"
+plt.rcParams["mathtext.fontset"] = "cm"
+mpl.rcParams["font.family"] = "serif"
+plt.rcParams["font.family"] = "serif"
 
 try:
     import bound_detect
@@ -18,12 +23,19 @@ except Exception:  # pragma: no cover - optional example dependency
     bound_detect = None
 
 
-CJET_CMAP = LinearSegmentedColormap.from_list(
-    "cjet",
-    plt.get_cmap("jet")(np.linspace(0, 1, 256)),
-    N=256,
-)
-PAPER_SEQUENTIAL_CMAP = CJET_CMAP
+PAPER_SEQUENTIAL_CMAP = plt.get_cmap("viridis")
+PAPER_BOUNDARY_RED = "#ff3b30"
+PAPER_BOUNDARY_BLUE = "#0000cc"
+VISUAL_LABEL_SIZE = 36
+VISUAL_TICK_SIZE = 18
+VISUAL_COLORBAR_TICK_SIZE = 18
+VISUAL_TICK_FORMAT = "{:.2f}"
+VISUAL_MESH_LABEL_SIZE_EX44 = 55
+VISUAL_MESH_LABEL_SIZE_EX45_X = 44
+VISUAL_MESH_LABEL_SIZE_EX45_Y = 44
+VISUAL_MESH_TICK_SIZE_EX44 = 26
+VISUAL_MESH_TICK_SIZE_EX45 = 30
+EXAMPLE_DIR_PATTERN = re.compile(r"^Ex\d+\.\d+$", re.IGNORECASE)
 
 
 def _get_bound_detect_module():
@@ -53,9 +65,108 @@ def kidney_curve(x, y, h, k, a):
 def _resolve_sequential_cmap(cmap=None):
     if cmap is None:
         return PAPER_SEQUENTIAL_CMAP
-    if isinstance(cmap, str) and cmap.lower() == "cjet":
-        return CJET_CMAP
     return cmap
+
+
+def _to_latex_axis_label(label):
+    if not isinstance(label, str):
+        return label
+    normalized = label.strip().lower()
+    aliases = {
+        "x": r"$x_1$",
+        "x1": r"$x_1$",
+        "x_1": r"$x_1$",
+        "$x_1$": r"$x_1$",
+        "y": r"$x_2$",
+        "x2": r"$x_2$",
+        "x_2": r"$x_2$",
+        "y2": r"$x_2$",
+        "$x_2$": r"$x_2$",
+    }
+    return aliases.get(normalized, label)
+
+
+def _make_tick_formatter(tick_format=VISUAL_TICK_FORMAT):
+    return FuncFormatter(lambda value, _: tick_format.format(value))
+
+
+def _format_tick_strings(values, tick_format=VISUAL_TICK_FORMAT):
+    return [tick_format.format(float(value)) for value in values]
+
+
+def _format_compact_tick_strings(values, decimals=2):
+    labels = []
+    threshold = 0.5 * 10 ** (-decimals)
+    for value in values:
+        numeric = round(float(value), decimals)
+        if abs(numeric) < threshold:
+            numeric = 0.0
+        label = f"{numeric:.{decimals}f}".rstrip("0").rstrip(".")
+        if "." not in label:
+            label += ".0"
+        labels.append(label)
+    return labels
+
+
+def _infer_example_prefix_from_path(path):
+    if not path:
+        return None
+    normalized = os.path.abspath(os.path.expanduser(str(path)))
+    for part in reversed(re.split(r"[\\/]+", normalized)):
+        if EXAMPLE_DIR_PATTERN.fullmatch(part):
+            return part.lower()
+    return None
+
+
+def _infer_example_prefix(*paths):
+    for path in paths:
+        prefix = _infer_example_prefix_from_path(path)
+        if prefix:
+            return prefix
+    return _infer_example_prefix_from_path(os.getcwd())
+
+
+def _prefix_filename_for_example(filename, *paths):
+    if not filename:
+        return filename
+    prefix = _infer_example_prefix(*paths)
+    if not prefix:
+        return filename
+    if filename.lower().startswith(prefix + "_"):
+        return filename
+    return f"{prefix}_{filename}"
+
+
+def _resolve_output_path(output_directory, output_filename):
+    directory = output_directory or "."
+    filename = _prefix_filename_for_example(output_filename, directory)
+    return os.path.join(directory, filename)
+
+
+def _resolve_save_path(save_path):
+    if not save_path:
+        return save_path
+    directory = os.path.dirname(save_path)
+    filename = os.path.basename(save_path)
+    prefixed = _prefix_filename_for_example(filename, save_path, directory)
+    return os.path.join(directory, prefixed) if directory else prefixed
+
+
+def _resolve_optional_save_path(save_path=None, output_directory=None, output_filename=None):
+    if save_path:
+        return _resolve_save_path(save_path)
+    if output_filename:
+        directory = output_directory or "."
+        return _resolve_output_path(directory, output_filename)
+    return None
+
+
+def _ensure_parent_directory(path):
+    if not path:
+        return
+    directory = os.path.dirname(path)
+    if directory and not os.path.exists(directory):
+        os.makedirs(directory)
 
 
 def draw(
@@ -66,10 +177,11 @@ def draw(
     output_directory=None,
     output_filename=None,
     cmap=None,
-    label_size=30,
-    tick_size=18,
-    colorbar_tick_size=18,
-    tick_format="{:g}",
+    label_size=VISUAL_LABEL_SIZE,
+    tick_size=VISUAL_TICK_SIZE,
+    colorbar_tick_size=VISUAL_COLORBAR_TICK_SIZE,
+    tick_format=VISUAL_TICK_FORMAT,
+    colorbar_tick_format="{:.2f}",
 ):
     """Draw a 2D contour map with legacy positional-call compatibility."""
     if len(args) == 0:
@@ -93,7 +205,7 @@ def draw(
     elif not output_directory:
         output_directory = "."
 
-    full_output_path = os.path.join(output_directory, output_filename)
+    full_output_path = _resolve_output_path(output_directory, output_filename)
 
     plt.figure(figsize=(8, 6))
     contour_fill = plt.contourf(
@@ -110,11 +222,16 @@ def draw(
 
     cbar = plt.colorbar(contour_fill, shrink=1, aspect=12)
     cbar.ax.tick_params(labelsize=colorbar_tick_size)
+    cbar.ax.yaxis.set_major_formatter(_make_tick_formatter(colorbar_tick_format))
+    cbar.update_ticks()
+    colorbar_ticks = cbar.get_ticks()
+    cbar.set_ticks(colorbar_ticks)
+    cbar.set_ticklabels([colorbar_tick_format.format(tick) for tick in colorbar_ticks])
 
     plt.xlabel(r"$x_1$", fontsize=label_size)
     plt.ylabel(r"$x_2$", fontsize=label_size)
     plt.tick_params(axis="both", which="major", labelsize=tick_size)
-    formatter = FuncFormatter(lambda value, _: tick_format.format(value))
+    formatter = _make_tick_formatter(tick_format)
     ax.xaxis.set_major_formatter(formatter)
     ax.yaxis.set_major_formatter(formatter)
     ax.set_facecolor("white")
@@ -159,7 +276,7 @@ def show_saved_images(image_paths, titles=None, output_directory=".", output_fil
             os.makedirs(output_directory)
         elif not output_directory:
             output_directory = "."
-        fig.savefig(os.path.join(output_directory, output_filename), dpi=300, bbox_inches="tight")
+        fig.savefig(_resolve_output_path(output_directory, output_filename), dpi=300, bbox_inches="tight")
     plt.show()
     plt.close(fig)
     return fig
@@ -243,7 +360,7 @@ def plot_saved_cell_mesh(
             os.makedirs(output_directory)
         elif not output_directory:
             output_directory = "."
-        fig.savefig(os.path.join(output_directory, output_filename), dpi=300, bbox_inches="tight")
+        fig.savefig(_resolve_output_path(output_directory, output_filename), dpi=300, bbox_inches="tight")
     plt.show()
     plt.close(fig)
     return fig
@@ -596,9 +713,10 @@ def plot_noise_centers_from_models(
     plt.tight_layout(rect=[0, 0, 1, 1])
 
     if output_filename:
-        fig.savefig(os.path.join(noise_dir, output_filename), dpi=300, bbox_inches="tight")
-        if output_filename.lower().endswith(".pdf"):
-            fig.savefig(os.path.join(noise_dir, output_filename[:-4] + ".png"), dpi=300, bbox_inches="tight")
+        full_output_path = _resolve_output_path(noise_dir, output_filename)
+        fig.savefig(full_output_path, dpi=300, bbox_inches="tight")
+        if full_output_path.lower().endswith(".pdf"):
+            fig.savefig(os.path.splitext(full_output_path)[0] + ".png", dpi=300, bbox_inches="tight")
     plt.show()
     plt.close(fig)
     print("noise models:", [os.path.basename(path) for path, _ in centers_by_model])
@@ -676,9 +794,10 @@ def plot_cell_mesh_and_noise_centers(
     if output_filename:
         if noise_dir and not os.path.exists(noise_dir):
             os.makedirs(noise_dir)
-        fig.savefig(os.path.join(noise_dir, output_filename), dpi=300, bbox_inches="tight")
-        if output_filename.lower().endswith(".pdf"):
-            fig.savefig(os.path.join(noise_dir, output_filename[:-4] + ".png"), dpi=300, bbox_inches="tight")
+        full_output_path = _resolve_output_path(noise_dir, output_filename)
+        fig.savefig(full_output_path, dpi=300, bbox_inches="tight")
+        if full_output_path.lower().endswith(".pdf"):
+            fig.savefig(os.path.splitext(full_output_path)[0] + ".png", dpi=300, bbox_inches="tight")
     plt.show()
     plt.close(fig)
     print("noise models:", [os.path.basename(path) for path, _ in centers_by_model])
@@ -903,7 +1022,7 @@ def plot_boundary_shrinking_and_noise_centers(
             os.makedirs(output_directory)
         elif not output_directory:
             output_directory = "."
-        fig.savefig(os.path.join(output_directory, output_filename), dpi=300, bbox_inches="tight")
+        fig.savefig(_resolve_output_path(output_directory, output_filename), dpi=300, bbox_inches="tight")
     if show:
         plt.show()
     plt.close(fig)
@@ -917,13 +1036,24 @@ def plot_boundary_shrinking_and_noise_centers(
     }
 
 
-def improved_plot(data, title, x_min, x_max, y_min, y_max, xlabel="x1", ylabel="x2", cmap=PAPER_SEQUENTIAL_CMAP, n_ticks=5):
+def improved_plot(
+    data,
+    title,
+    x_min,
+    x_max,
+    y_min,
+    y_max,
+    xlabel=r"$x_1$",
+    ylabel=r"$x_2$",
+    cmap=PAPER_SEQUENTIAL_CMAP,
+    n_ticks=5,
+):
     plt.figure(figsize=(3, 3), dpi=120)
     ax = sns.heatmap(data.T, cmap=cmap, cbar_kws={"shrink": 0.8}, cbar=False)
     plt.gca().invert_yaxis()
 
-    plt.xlabel(xlabel, fontsize=14)
-    plt.ylabel(ylabel, fontsize=14)
+    plt.xlabel(_to_latex_axis_label(xlabel), fontsize=14)
+    plt.ylabel(_to_latex_axis_label(ylabel), fontsize=14)
 
     x_labels = np.round(np.linspace(x_min, x_max, n_ticks), decimals=2)
     y_labels = np.round(np.linspace(y_min, y_max, n_ticks), decimals=2)
@@ -1036,8 +1166,8 @@ class MeshVisualizer:
         ax.set_aspect("equal")
         ax.grid(True, linestyle=":", alpha=0.2)
         ax.set_title(title, fontsize=12, fontweight="bold")
-        ax.set_xlabel("X")
-        ax.set_ylabel("Y")
+        ax.set_xlabel(r"$x_1$")
+        ax.set_ylabel(r"$x_2$")
 
     def plot_mesh_comparison(self, initial_cells, refined_cells, cell_indicators=None, save_path=None, S_num=None, points=None):
         del cell_indicators
@@ -1058,8 +1188,9 @@ class MeshVisualizer:
 
         plt.tight_layout(rect=[0, 0.03, 1, 0.95])
         if save_path:
-            plt.savefig(save_path, dpi=300, bbox_inches="tight")
-            print(f"Figure saved to: {save_path}")
+            resolved_save_path = _resolve_save_path(save_path)
+            plt.savefig(resolved_save_path, dpi=300, bbox_inches="tight")
+            print(f"Figure saved to: {resolved_save_path}")
         plt.show()
         return fig
 
@@ -1078,8 +1209,8 @@ class MeshVisualizer:
         else:
             ax1.text(0.5, 0.5, "Not enough points for tricontourf", ha="center", va="center")
 
-        ax1.set_xlabel("X")
-        ax1.set_ylabel("Y")
+        ax1.set_xlabel(r"$x_1$")
+        ax1.set_ylabel(r"$x_2$")
         ax1.set_aspect("equal", adjustable="box")
 
         if points.shape[0] >= 3:
@@ -1091,8 +1222,9 @@ class MeshVisualizer:
 
         plt.tight_layout()
         if save_path:
-            plt.savefig(save_path, dpi=300, bbox_inches="tight")
-            print(f"Solution and mesh analysis plot saved to: {save_path}")
+            resolved_save_path = _resolve_save_path(save_path)
+            plt.savefig(resolved_save_path, dpi=300, bbox_inches="tight")
+            print(f"Solution and mesh analysis plot saved to: {resolved_save_path}")
         plt.show()
         return fig
 
@@ -1136,8 +1268,9 @@ class MeshVisualizer:
         plt.suptitle(f"Adaptive Refinement Statistics ({len(history)} iterations)", fontsize=14, fontweight="bold")
         plt.tight_layout()
         if save_path:
-            plt.savefig(save_path, dpi=300, bbox_inches="tight")
-            print(f"Refinement history plot saved to: {save_path}")
+            resolved_save_path = _resolve_save_path(save_path)
+            plt.savefig(resolved_save_path, dpi=300, bbox_inches="tight")
+            print(f"Refinement history plot saved to: {resolved_save_path}")
         plt.show()
         return fig
 
@@ -1199,7 +1332,7 @@ class GridMeshVisualizer:
             return "ex44" if x_range[0] < 0 else "ex45"
         return "ex43"
 
-    def _plot_solution(self, fig, ax, points, S_num, colorbar_size=16):
+    def _plot_solution(self, fig, ax, points, S_num, colorbar_size=20):
         if S_num is None or points is None:
             return
         p_np = points.cpu().detach().numpy() if hasattr(points, "cpu") else np.asarray(points)
@@ -1219,21 +1352,57 @@ class GridMeshVisualizer:
     def _draw_boundaries(self, ax, style):
         if style == "ex43":
             ax.add_patch(
-                patches.Circle((0.5, 0.5), 0.2, linewidth=1.5, edgecolor="r", facecolor="none", label="Boundary Layer")
+                patches.Circle(
+                    (0.5, 0.5),
+                    0.2,
+                    linewidth=2.4,
+                    edgecolor=PAPER_BOUNDARY_RED,
+                    facecolor="none",
+                    label="Boundary Layer",
+                )
             )
         elif style == "ex44":
             ax.add_patch(
-                patches.Circle((-0.06, 0.0), 0.06, linewidth=2, edgecolor="r", facecolor="none", label="Boundary Layer")
+                patches.Circle(
+                    (-0.06, 0.0),
+                    0.06,
+                    linewidth=2.8,
+                    edgecolor=PAPER_BOUNDARY_RED,
+                    facecolor="none",
+                    label="Boundary Layer",
+                )
             )
             ax.add_patch(
-                patches.Circle((0.08, 0.0), 0.06, linewidth=2, edgecolor="r", facecolor="none", label="Boundary Layer")
+                patches.Circle(
+                    (0.08, 0.0),
+                    0.06,
+                    linewidth=2.8,
+                    edgecolor=PAPER_BOUNDARY_RED,
+                    facecolor="none",
+                    label="Boundary Layer",
+                )
             )
         elif style == "ex45":
             ax.add_patch(
-                patches.Circle((0.71, 0.5), 0.2, linewidth=2, edgecolor="r", facecolor="none", label="Boundary Layer")
+                patches.Circle(
+                    (0.71, 0.5),
+                    0.2,
+                    linewidth=2.8,
+                    edgecolor=PAPER_BOUNDARY_RED,
+                    facecolor="none",
+                    label="Boundary Layer",
+                )
             )
             ax.add_patch(
-                patches.Rectangle((0.29, 0.3), 0.2, 0.4, linewidth=2, edgecolor="b", facecolor="none", label="Defined Rectangle")
+                patches.Rectangle(
+                    (0.29, 0.3),
+                    0.2,
+                    0.4,
+                    linewidth=2.4,
+                    edgecolor=PAPER_BOUNDARY_BLUE,
+                    facecolor="none",
+                    label="Defined Rectangle",
+                )
             )
         elif style == "kidney":
             self.contour_points_implicit = self._load_true_boundary()
@@ -1241,8 +1410,8 @@ class GridMeshVisualizer:
             ax.plot(
                 self.contour_points_implicit[:, 0],
                 self.contour_points_implicit[:, 1],
-                color="red",
-                linewidth=3,
+                color=PAPER_BOUNDARY_RED,
+                linewidth=3.2,
                 linestyle="--",
                 label="True Boundary",
             )
@@ -1255,9 +1424,18 @@ class GridMeshVisualizer:
         ax.grid(True, linestyle=":", alpha=0.2)
 
         if style in {"ex43", "kidney"}:
-            ax.set_xlabel("$x_1$", fontsize=40 if style == "kidney" else 24)
-            ax.set_ylabel("$x_2$", fontsize=40 if style == "kidney" else 24)
-            ax.tick_params(axis="both", which="major", labelsize=22 if style == "kidney" else 20)
+            if style == "kidney":
+                ax.set_xlabel(r"$x_1$", fontsize=40)
+                ax.set_ylabel(r"$x_2$", fontsize=40)
+                ax.tick_params(axis="both", which="major", labelsize=22)
+            else:
+                ax.set_xlabel(r"$x_1$", fontsize=VISUAL_LABEL_SIZE)
+                ax.set_ylabel(r"$x_2$", fontsize=VISUAL_LABEL_SIZE)
+                ax.tick_params(axis="both", which="major", labelsize=VISUAL_TICK_SIZE)
+                formatter = _make_tick_formatter()
+                ax.xaxis.set_major_formatter(formatter)
+                ax.yaxis.set_major_formatter(formatter)
+                ax.set_facecolor("white")
             if label is None and style == "ex43":
                 ax.set_xlabel("")
                 ax.set_ylabel("")
@@ -1265,19 +1443,24 @@ class GridMeshVisualizer:
                 ax.set_yticks([])
         else:
             n_ticks = 5
-            x_labels = np.round(np.linspace(x_range[0], x_range[1], n_ticks), 2)
-            y_labels = np.round(np.linspace(y_range[0], y_range[1], n_ticks), 2)
-            ax.set_xticks(np.linspace(x_range[0], x_range[1], n_ticks))
-            ax.set_xticklabels(x_labels, rotation=0, fontsize=28 if style == "ex44" else 20)
+            x_ticks = np.linspace(x_range[0], x_range[1], n_ticks)
+            y_ticks = np.linspace(y_range[0], y_range[1], n_ticks)
+            tick_size = VISUAL_MESH_TICK_SIZE_EX44 if style == "ex44" else VISUAL_MESH_TICK_SIZE_EX45
+            ax.set_xticks(x_ticks)
+            ax.set_xticklabels(_format_compact_tick_strings(x_ticks), rotation=0, fontsize=tick_size)
             if style == "ex44":
-                ax.set_yticks(np.linspace(y_range[0], y_range[1], n_ticks))
-                ax.set_yticklabels(y_labels, fontsize=28)
-                ax.set_xlabel("$x_1$", fontsize=38)
+                ax.set_yticks(y_ticks)
+                ax.set_yticklabels(_format_compact_tick_strings(y_ticks), fontsize=tick_size)
+                ax.set_xlabel("$x_1$", fontsize=VISUAL_MESH_LABEL_SIZE_EX44)
             else:
                 ax.set_yticks([])
-                ax.set_xlabel("$x_1$", fontsize=34)
+                ax.set_xlabel("$x_1$", fontsize=VISUAL_MESH_LABEL_SIZE_EX45_X)
             if label:
-                ax.set_ylabel("$x_2$", fontsize=38 if style == "ex44" else 36)
+                ax.set_ylabel(
+                    "$x_2$",
+                    fontsize=VISUAL_MESH_LABEL_SIZE_EX44 if style == "ex44" else VISUAL_MESH_LABEL_SIZE_EX45_Y,
+                )
+            ax.tick_params(axis="both", which="major", labelsize=tick_size)
 
     def _safe_layout(self, fig, bottom=0.14):
         """Leave enough bottom margin for large math axis labels in saved PDFs."""
@@ -1296,7 +1479,6 @@ class GridMeshVisualizer:
         save_path=None,
         style=None,
     ):
-        del save_path
         leaf_cells = self.collect_leaf_cells(cells)
         xr, yr = self._infer_ranges(cells, points, default=((x_range, y_range) if x_range is not None and y_range is not None else None))
         if style is None:
@@ -1319,6 +1501,11 @@ class GridMeshVisualizer:
 
         self._draw_boundaries(ax, style)
         self._format_axes(ax, xr, yr, style, label)
+        if save_path:
+            resolved_save_path = _resolve_save_path(save_path)
+            self._safe_layout(fig, bottom=0.14 if style == "kidney" else 0.08)
+            fig.savefig(resolved_save_path, dpi=300, bbox_inches="tight", pad_inches=0.18)
+            print(f"Figure saved to: {resolved_save_path}")
         return fig
 
     def plot_mesh_comparison(self, initial_cells, refined_cells, kidney_bound=None, S_num=None, points=None, save_path=None):
@@ -1333,8 +1520,9 @@ class GridMeshVisualizer:
             self._plot_single_mesh(fig, ax2, refined_cells, S_num=S_num, points=points)
         self._safe_layout(fig, bottom=0.08)
         if save_path:
-            plt.savefig(save_path, dpi=300, bbox_inches="tight", pad_inches=0.18)
-            print(f"Figure saved to: {save_path}")
+            resolved_save_path = _resolve_save_path(save_path)
+            plt.savefig(resolved_save_path, dpi=300, bbox_inches="tight", pad_inches=0.18)
+            print(f"Figure saved to: {resolved_save_path}")
         plt.show()
         return fig
 
@@ -1458,9 +1646,10 @@ class GridMeshVisualizer:
         if output_filename:
             if noise_dir and not os.path.exists(noise_dir):
                 os.makedirs(noise_dir)
-            fig.savefig(os.path.join(noise_dir, output_filename), dpi=300, bbox_inches="tight", pad_inches=0.18)
-            if output_filename.lower().endswith(".pdf"):
-                fig.savefig(os.path.join(noise_dir, output_filename[:-4] + ".png"), dpi=300, bbox_inches="tight", pad_inches=0.18)
+            full_output_path = _resolve_output_path(noise_dir, output_filename)
+            fig.savefig(full_output_path, dpi=300, bbox_inches="tight", pad_inches=0.18)
+            if full_output_path.lower().endswith(".pdf"):
+                fig.savefig(os.path.splitext(full_output_path)[0] + ".png", dpi=300, bbox_inches="tight", pad_inches=0.18)
 
         return fig
 
@@ -1565,20 +1754,33 @@ class GridMeshVisualizer:
         if output_filename:
             if noise_dir and not os.path.exists(noise_dir):
                 os.makedirs(noise_dir)
-            fig.savefig(os.path.join(noise_dir, output_filename), dpi=300, bbox_inches="tight", pad_inches=0.18)
-            if output_filename.lower().endswith(".pdf"):
-                fig.savefig(os.path.join(noise_dir, output_filename[:-4] + ".png"), dpi=300, bbox_inches="tight", pad_inches=0.18)
+            full_output_path = _resolve_output_path(noise_dir, output_filename)
+            fig.savefig(full_output_path, dpi=300, bbox_inches="tight", pad_inches=0.18)
+            if full_output_path.lower().endswith(".pdf"):
+                fig.savefig(os.path.splitext(full_output_path)[0] + ".png", dpi=300, bbox_inches="tight", pad_inches=0.18)
         return fig
 
-    def plot_mesh_evolution(self, cells_store, S_num_stores=None, points=None, save_path=None, label=None, temp=None, g_S=None):
+    def plot_mesh_evolution(
+        self,
+        cells_store,
+        S_num_stores=None,
+        points=None,
+        save_path=None,
+        label=None,
+        temp=None,
+        g_S=None,
+        output_directory=None,
+        output_filename=None,
+    ):
         n_steps = len(cells_store)
         x_range, y_range = self._infer_ranges(cells_store[0], points, default=None)
         style = self._infer_style(x_range, y_range, method="evolution")
 
         if temp:
-            width = (8.8 if style == "ex44" else 6.5) * (n_steps + 1)
-            height = 7.5 if style == "ex44" else 7
-            fig, axes = plt.subplots(1, n_steps + 1, figsize=(width, height))
+            width = (6.5 if style == "ex44" else 6.3) * (n_steps + 1)
+            height = 6.5 if style == "ex44" else 7
+            wspace = 0.2 if style == "ex44" else 0.2
+            fig, axes = plt.subplots(1, n_steps + 1, figsize=(width, height), gridspec_kw={"wspace": wspace})
         else:
             fig, axes = plt.subplots(1, n_steps, figsize=(5 * n_steps, 5))
         if n_steps == 1:
@@ -1602,9 +1804,9 @@ class GridMeshVisualizer:
             )
             axes[i].set_title(f"$\\mathcal{{C}}_{{{i}}}$", fontsize=40 if style in {"ex44", "ex45"} else 20)
             if style == "ex44":
-                axes[i].tick_params(axis="both", labelsize=28)
+                axes[i].tick_params(axis="both", labelsize=VISUAL_MESH_TICK_SIZE_EX44)
             elif style == "ex45":
-                axes[i].tick_params(axis="x", labelsize=28)
+                axes[i].tick_params(axis="x", labelsize=VISUAL_MESH_TICK_SIZE_EX45)
 
         if temp and g_S is not None and bound_detect is not None:
             tau_x_min, tau_x_max = x_range
@@ -1638,28 +1840,55 @@ class GridMeshVisualizer:
                 eps_mode="grid_scaled",
             )
             axes[-1].set_title(params["title"], fontsize=42 if style == "ex44" else 40)
-            if axes[-1].collections:
-                mappable = axes[-1].collections[0]
-                cbar = fig.colorbar(mappable, ax=axes, orientation="vertical", fraction=0.025, pad=0.02)
-                cbar.ax.tick_params(labelsize=24)
-                cbar.set_label(r"$S^{(0)}$", fontsize=30)
+            mappable = axes[-1].collections[0] if axes[-1].collections else None
             self._format_axes(axes[-1], x_range, y_range, style, True)
 
             if style == "ex44":
                 for ax in axes[1:]:
                     ax.set_ylabel("")
                     ax.set_yticks([])
-                axes[0].set_ylabel("$x_2$", fontsize=38)
+                axes[0].set_ylabel("$x_2$", fontsize=VISUAL_MESH_LABEL_SIZE_EX44)
                 n_ticks = 5
-                y_labels = np.round(np.linspace(y_range[0], y_range[1], n_ticks), 2)
-                axes[0].set_yticks(np.linspace(y_range[0], y_range[1], n_ticks))
-                axes[0].set_yticklabels(y_labels, fontsize=28)
+                y_ticks = np.linspace(y_range[0], y_range[1], n_ticks)
+                axes[0].set_yticks(y_ticks)
+                axes[0].set_yticklabels(_format_compact_tick_strings(y_ticks), fontsize=VISUAL_MESH_TICK_SIZE_EX44)
                 axes[-1].set_ylabel("")
                 axes[-1].set_yticks([])
+            elif style == "ex45":
+                n_ticks = 5
+                y_ticks = np.linspace(y_range[0], y_range[1], n_ticks)
+                axes[0].set_ylabel("$x_2$", fontsize=VISUAL_MESH_LABEL_SIZE_EX45_Y)
+                axes[0].set_yticks(y_ticks)
+                axes[0].set_yticklabels(_format_compact_tick_strings(y_ticks), fontsize=VISUAL_MESH_TICK_SIZE_EX45)
+                axes[-1].set_ylabel("")
 
-        if save_path:
-            plt.savefig(save_path, dpi=300, bbox_inches="tight")
-            print(f"Figure saved to: {save_path}")
+            if mappable is not None:
+                subplots_right = 0.90 if style == "ex44" else 0.89
+                fig.subplots_adjust(right=subplots_right, wspace=wspace)
+                last_pos = axes[-1].get_position()
+                cbar_gap = 0.010 if style == "ex44" else 0.012
+                cbar_width = 0.014 if style == "ex44" else 0.012
+                cbar_tick_size = 24 if style == "ex44" else 30
+                cbar_label_size = 36 if style == "ex44" else 36
+                cax = fig.add_axes([last_pos.x1 + cbar_gap, last_pos.y0, cbar_width, last_pos.height])
+                cbar = fig.colorbar(mappable, cax=cax, orientation="vertical")
+                cbar.ax.tick_params(labelsize=cbar_tick_size)
+                cbar.set_label(r"$S^{(0)}$", fontsize=cbar_label_size)
+                cbar.ax.yaxis.set_major_formatter(_make_tick_formatter("{:.2f}"))
+                cbar.update_ticks()
+                colorbar_ticks = cbar.get_ticks()
+                cbar.set_ticks(colorbar_ticks)
+                cbar.set_ticklabels([f"{tick:.2f}" for tick in colorbar_ticks])
+
+        resolved_save_path = _resolve_optional_save_path(
+            save_path=save_path,
+            output_directory=output_directory,
+            output_filename=output_filename,
+        )
+        if resolved_save_path:
+            _ensure_parent_directory(resolved_save_path)
+            plt.savefig(resolved_save_path, dpi=300, bbox_inches="tight")
+            print(f"Figure saved to: {resolved_save_path}")
         plt.show()
         return fig
 

@@ -69,6 +69,62 @@ def _resolve_dbscan_eps(eps, X, Y, Z, eps_mode):
     return float(eps), h, "absolute"
 
 
+def _compute_cv_from_values(values):
+    values = np.asarray(values, dtype=float).reshape(-1)
+    values = values[np.isfinite(values)]
+    if values.size == 0:
+        return np.nan, 0
+    mean_abs = np.mean(np.abs(values))
+    cv = np.std(values) / mean_abs if mean_abs > 1e-12 else 0.0
+    return float(cv), int(values.size)
+
+
+def _mask_inside_shape_3d(X, Y, Z, shape_type, final_params, diagnostics):
+    X = np.asarray(X, dtype=float)
+    Y = np.asarray(Y, dtype=float)
+    Z = np.asarray(Z, dtype=float)
+    center = np.asarray(final_params.get("center", [np.nan, np.nan, np.nan]), dtype=float)
+    tol = 1e-12
+
+    if shape_type == "Rectangle":
+        lx = max(float(final_params.get("Lx", np.nan)), 1e-12)
+        ly = max(float(final_params.get("Ly", np.nan)), 1e-12)
+        lz = max(float(final_params.get("Lz", np.nan)), 1e-12)
+        return (
+            (np.abs(X - center[0]) <= lx + tol)
+            & (np.abs(Y - center[1]) <= ly + tol)
+            & (np.abs(Z - center[2]) <= lz + tol)
+        )
+
+    if shape_type == "Ellipsoid":
+        a = max(float(final_params.get("a", np.nan)), 1e-12)
+        b = max(float(final_params.get("b", np.nan)), 1e-12)
+        c = max(float(final_params.get("c", np.nan)), 1e-12)
+        metric = ((X - center[0]) / a) ** 2 + ((Y - center[1]) / b) ** 2 + ((Z - center[2]) / c) ** 2
+        return metric <= 1.0 + 1e-9
+
+    if shape_type in {"Donut", "tori"}:
+        axis = int(diagnostics.get("torus_axis", 2))
+        plane_dims = tuple(diagnostics.get("torus_plane_dims", (0, 1)))
+        coords = [X, Y, Z]
+        rho = np.sqrt(
+            (coords[plane_dims[0]] - center[plane_dims[0]]) ** 2
+            + (coords[plane_dims[1]] - center[plane_dims[1]]) ** 2
+        )
+        axial = np.abs(coords[axis] - center[axis])
+        r_major = max(float(final_params.get("R_major", np.nan)), 1e-12)
+        r_minor = max(float(final_params.get("r_minor", np.nan)), 1e-12)
+        return (rho - r_major) ** 2 + axial**2 <= r_minor**2 + 1e-9
+
+    return np.zeros(X.shape, dtype=bool)
+
+
+def _interior_s_values_3d(X, Y, Z, S_num, shape_type, final_params, diagnostics):
+    S_num = _resolve_field_array(S_num, "S_num")
+    mask = _mask_inside_shape_3d(X, Y, Z, shape_type, final_params, diagnostics)
+    return np.asarray(S_num, dtype=float)[mask], "geometry_interior"
+
+
 def _sorted_quantile_index(length, quantile):
     if length <= 0:
         return 0
@@ -1092,11 +1148,15 @@ def detect_shape_3d(
 
         basis_func_type = "Sigmoid"
         cv = np.nan
+        cv_point_count = 0
+        cv_source = "unavailable"
         if S_num is not None:
-            std_s = np.std(s_vals)
-            mean_s = np.mean(np.abs(s_vals))
-            cv = std_s / mean_s if mean_s > 1e-12 else 0.0
-            print(f"  CV of S_num: {cv:.3f}")
+            cv_values, cv_source = _interior_s_values_3d(X, Y, Z, S_num, shape_type, final_params, diagnostics)
+            cv, cv_point_count = _compute_cv_from_values(cv_values)
+            if cv_point_count == 0:
+                cv, cv_point_count = _compute_cv_from_values(s_vals)
+                cv_source = "cluster_points_fallback"
+            print(f"  CV of S_num ({cv_source}, n={cv_point_count}): {cv:.3f}")
             if cv >= t_cv:
                 basis_func_type = "Exp"
 
@@ -1158,6 +1218,8 @@ def detect_shape_3d(
                 "dist_01": diagnostics["dist_01"],
                 "dist_99": diagnostics["dist_99"],
                 "cv": float(cv) if np.isfinite(cv) else np.nan,
+                "cv_source": cv_source,
+                "cv_point_count": int(cv_point_count),
             }
         )
 

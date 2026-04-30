@@ -20,6 +20,7 @@ plt.rcParams["font.family"] = "serif"
 
 PAPER_SEQUENTIAL_CMAP = plt.get_cmap("viridis")
 PAPER_BOUNDARY_RED = "#ff3b30"
+PAPER_BOUNDARY_BLUE = "#0000cc"
 PAPER_COLOR_LEVELS = 20
 VISUAL_MATCH_FIGSIZE = (8, 6)
 VISUAL_MATCH_LABEL_SIZE = 36
@@ -398,6 +399,67 @@ def dist_to_axis_aligned_ellipsoid(points, center, width, height):
     return np.mean(np.abs(metric - 1))
 
 
+def _compute_cv_from_values(values):
+    values = np.asarray(values, dtype=float).reshape(-1)
+    values = values[np.isfinite(values)]
+    if values.size == 0:
+        return np.nan, 0
+    mean_abs = np.mean(np.abs(values))
+    cv = np.std(values) / mean_abs if mean_abs > 1e-12 else 0.0
+    return float(cv), int(values.size)
+
+
+def _mask_inside_polygon_2d(X, Y, boundary_points):
+    boundary_points = np.asarray(boundary_points, dtype=float)
+    if boundary_points.ndim != 2 or boundary_points.shape[0] < 3:
+        return np.zeros(np.asarray(X).shape, dtype=bool)
+    path = mpath.Path(boundary_points, closed=True)
+    coords = np.column_stack((np.asarray(X, dtype=float).ravel(), np.asarray(Y, dtype=float).ravel()))
+    return path.contains_points(coords, radius=1e-12).reshape(np.asarray(X).shape)
+
+
+def _mask_inside_shape_2d(X, Y, shape_type, final_params, boundary_points):
+    X = np.asarray(X, dtype=float)
+    Y = np.asarray(Y, dtype=float)
+    center = np.asarray(final_params.get("center", [np.nan, np.nan]), dtype=float)
+    tol = 1e-12
+
+    if shape_type == "Rectangle":
+        width = float(final_params.get("W", np.nan))
+        height = float(final_params.get("H", np.nan))
+        return (np.abs(X - center[0]) <= width / 2 + tol) & (np.abs(Y - center[1]) <= height / 2 + tol)
+
+    if shape_type == "Ellipsoid":
+        a = max(float(final_params.get("a", np.nan)), 1e-12)
+        b = max(float(final_params.get("b", np.nan)), 1e-12)
+        metric = ((X - center[0]) / a) ** 2 + ((Y - center[1]) / b) ** 2
+        return metric <= 1.0 + 1e-9
+
+    if shape_type == "Donut":
+        r_min = float(final_params.get("r_min", np.nan))
+        r_max = float(final_params.get("r_max", np.nan))
+        rho = np.sqrt((X - center[0]) ** 2 + (Y - center[1]) ** 2)
+        return (rho >= r_min - tol) & (rho <= r_max + tol)
+
+    if shape_type == "general":
+        return _mask_inside_polygon_2d(X, Y, boundary_points)
+
+    return _mask_inside_polygon_2d(X, Y, boundary_points)
+
+
+def _interior_s_values_2d(X, Y, S_num, shape_type, final_params, boundary_points):
+    S_num = _resolve_field_array(S_num, "S_num")
+    mask = _mask_inside_shape_2d(X, Y, shape_type, final_params, boundary_points)
+    values = np.asarray(S_num, dtype=float)[mask]
+    source = "geometry_interior" if shape_type != "general" else "boundary_interior"
+    if values.size == 0 and len(boundary_points) >= 3:
+        fallback_mask = _mask_inside_polygon_2d(X, Y, boundary_points)
+        values = np.asarray(S_num, dtype=float)[fallback_mask]
+        if values.size > 0:
+            source = "boundary_interior_fallback"
+    return values, source
+
+
 def convex_hull_boundary(points):
     points = np.asarray(points, dtype=float)
     if len(points) < 3:
@@ -720,11 +782,15 @@ def detect_shape(
 
         basis_func_type = "Sigmoid"
         cv = np.nan
+        cv_point_count = 0
+        cv_source = "unavailable"
         if S_num is not None:
-            std_s = np.std(s_vals)
-            mean_s = np.mean(np.abs(s_vals))
-            cv = std_s / mean_s if mean_s > 1e-12 else 0.0
-            print(f"  CV of S_num: {cv:.3f}")
+            cv_values, cv_source = _interior_s_values_2d(X, Y, S_num, shape_type, final_params, boundary_points)
+            cv, cv_point_count = _compute_cv_from_values(cv_values)
+            if cv_point_count == 0:
+                cv, cv_point_count = _compute_cv_from_values(s_vals)
+                cv_source = "cluster_points_fallback"
+            print(f"  CV of S_num ({cv_source}, n={cv_point_count}): {cv:.3f}")
             if cv >= t_cv:
                 # Algorithm 3 uses the peak-like branch "Exp (or ReLU)".
                 # In the 2D implementation we instantiate that branch with
@@ -756,6 +822,8 @@ def detect_shape(
                 "dist_05": diagnostics["dist_05"],
                 "dist_95": diagnostics["dist_95"],
                 "cv": float(cv) if np.isfinite(cv) else np.nan,
+                "cv_source": cv_source,
+                "cv_point_count": int(cv_point_count),
             }
         )
 
@@ -796,8 +864,8 @@ def detect_shape(
                 (plot_center[0] - width / 2, plot_center[1] - height / 2),
                 width,
                 height,
-                linewidth=1.8,
-                edgecolor="g",
+                linewidth=2.4,
+                edgecolor=PAPER_BOUNDARY_BLUE,
                 facecolor="none",
                 linestyle="--",
                 zorder=8,
