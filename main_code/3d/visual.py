@@ -1,10 +1,13 @@
 import os
-
+from skimage import measure
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 import numpy as np
-from matplotlib.colors import LinearSegmentedColormap
-from mpl_toolkits.mplot3d.art3d import Line3DCollection
+from matplotlib.colors import LinearSegmentedColormap, to_rgba
+from mpl_toolkits.mplot3d.art3d import Line3DCollection,Poly3DCollection
+
+plt.rcParams["mathtext.fontset"] = "cm"
+
 
 class MeshVisualizer3D:
     def __init__(self, figsize=(18, 8)):
@@ -310,7 +313,182 @@ class MeshVisualizer3D:
         
         plt.show()
         return fig
+    
+    def plot_isosurface(
+        self,
+        volume,
+        level=None,
+        color="#5AA7D9",
+        alpha=0.25,
+        show_wireframe=False,
+        show_center=True,
+        center=None,
+        elev=30,
+        azim=-60,
+        save_path=None,
+        ax=None,
+        title=None,
+        scalar_field=None,
+        cmap="viridis",
+        value_limits=None,
+        show_colorbar=False,
+        colorbar_ticks=None,
+        colorbar_label=r"$S^{(0)}$",
+    ):
+        """
+        Plot a shaded isosurface.
 
+        If ``scalar_field`` is provided, the surface geometry is extracted from
+        ``volume`` while the face colors are interpolated from ``scalar_field``.
+        """
+        volume = np.asarray(volume, dtype=float)
+        volume = np.nan_to_num(volume, copy=False)
+
+        volume_min = float(np.min(volume))
+        volume_max = float(np.max(volume))
+        if level is None:
+            level = 0.5 * (volume_min + volume_max)
+
+        print(
+            f"Global volume range: [{volume_min:.3f}, {volume_max:.3f}], using level={level:.3f}"
+        )
+
+        if not (volume_min < level < volume_max):
+            print("Marching cubes skipped: surface level must lie strictly inside the data range.")
+            return None
+
+        try:
+            verts, faces, normals, _ = measure.marching_cubes(volume, level=level)
+        except Exception as e:
+            print(f"Marching cubes failed: {e}")
+            return None
+
+        if len(verts) == 0 or len(faces) == 0:
+            print("No isosurface found at this level.")
+            return None
+
+        if hasattr(self, "domain_min") and hasattr(self, "domain_max"):
+            dmin = np.array(self.domain_min, dtype=float)
+            dmax = np.array(self.domain_max, dtype=float)
+            shape = np.maximum(np.array(volume.shape, dtype=float) - 1.0, 1.0)
+            mapped_verts = dmin + (verts / shape) * (dmax - dmin)
+        else:
+            mapped_verts = verts
+            print("Warning: domain_min/domain_max not set. Using raw voxel coordinates.")
+
+        try:
+            base_rgba = np.array(plt.get_cmap(color)(0.65))
+        except ValueError:
+            base_rgba = np.array(to_rgba(color))
+
+        face_normals = normals[faces].mean(axis=1)
+        face_normals /= np.linalg.norm(face_normals, axis=1, keepdims=True) + 1e-12
+
+        light_dir = np.array([0.35, -0.45, 0.82], dtype=float)
+        light_dir /= np.linalg.norm(light_dir)
+        lighting = np.clip(face_normals @ light_dir, 0.0, 1.0)
+        lighting = 0.35 + 0.65 * lighting
+
+        if scalar_field is not None:
+            from scipy.interpolate import RegularGridInterpolator
+
+            scalar_field = np.asarray(scalar_field, dtype=float)
+            scalar_field = np.nan_to_num(scalar_field, copy=False)
+            grid = [np.arange(s) for s in scalar_field.shape]
+            interp = RegularGridInterpolator(
+                grid,
+                scalar_field,
+                bounds_error=False,
+                fill_value=np.nan,
+            )
+            vertex_values = interp(verts)
+            face_values = np.nanmean(vertex_values[faces], axis=1)
+
+            if value_limits is None:
+                value_min = float(np.nanmin(face_values))
+                value_max = float(np.nanmax(face_values))
+            else:
+                value_min, value_max = value_limits
+
+            if np.isclose(value_min, value_max):
+                delta = max(1e-8, 1e-6 * max(1.0, abs(value_min)))
+                value_min -= delta
+                value_max += delta
+
+            norm = plt.Normalize(vmin=value_min, vmax=value_max)
+            cmap_obj = plt.get_cmap(cmap)
+            face_colors = cmap_obj(norm(face_values))
+            face_colors[:, :3] *= lighting[:, None]
+            face_colors[:, 3] = alpha
+        else:
+            face_values = None
+            norm = None
+            cmap_obj = None
+            face_colors = np.repeat(base_rgba[None, :], len(faces), axis=0)
+            face_colors[:, :3] *= lighting[:, None]
+            face_colors[:, 3] = alpha
+
+        mesh = Poly3DCollection(
+            mapped_verts[faces],
+            linewidths=0.15,
+            edgecolors=(0.1, 0.1, 0.1, 0.15) if show_wireframe else "none",
+        )
+        mesh.set_facecolors(face_colors)
+
+        created_figure = ax is None
+        if created_figure:
+            fig = plt.figure(figsize=(10, 10))
+            ax = fig.add_subplot(111, projection="3d")
+        else:
+            fig = ax.figure
+
+        ax.add_collection3d(mesh)
+
+        if hasattr(self, "domain_min") and hasattr(self, "domain_max"):
+            ax.set_xlim(self.domain_min[0], self.domain_max[0])
+            ax.set_ylim(self.domain_min[1], self.domain_max[1])
+            ax.set_zlim(self.domain_min[2], self.domain_max[2])
+
+        ax.set_box_aspect([1, 1, 1])
+        ax.view_init(elev=elev, azim=azim)
+
+        if created_figure:
+            ax.set_xlabel("$x_1$", fontsize=14)
+            ax.set_ylabel("$x_2$", fontsize=14)
+            ax.set_zlabel("$x_3$", fontsize=14)
+
+        if show_center and center is not None:
+            centers = np.atleast_2d(center)
+            ax.scatter(
+                centers[:, 0],
+                centers[:, 1],
+                centers[:, 2],
+                c="red",
+                marker="x",
+                s=80,
+                depthshade=False,
+            )
+
+        if show_colorbar and face_values is not None:
+            mappable = plt.cm.ScalarMappable(norm=norm, cmap=cmap_obj)
+            mappable.set_array(face_values)
+            cbar = fig.colorbar(mappable, ax=ax, shrink=0.58, pad=0.04)
+            cbar.set_label(colorbar_label, fontsize=20)
+            cbar.ax.tick_params(labelsize=16)
+            if colorbar_ticks is not None:
+                cbar.set_ticks(colorbar_ticks)
+
+        if created_figure:
+            ax.set_facecolor("white")
+            ax.grid(False)
+            if title is None:
+                title = f"Isosurface at level = {level:.4f}"
+            ax.set_title(title, fontsize=12)
+            if save_path:
+                plt.savefig(save_path, dpi=300, bbox_inches="tight")
+            plt.show()
+
+        return mesh
 
 def visualize_adaptive_refinement(cells, refined_cells, all_g_p, S_num, grad_S_num, 
                                  refinement_stats, cell_indicators=None):
@@ -363,6 +541,9 @@ def draw(
     x_label,
     y_label,
     xx,
+    cmap="viridis",
+    x_ticks=None,
+    y_ticks=None,
     output_directory=".",
     output_filename1="plot.png",
     output_filename2="plot_1d.png",
@@ -384,7 +565,7 @@ def draw(
         Y,
         data,
         levels=20,
-        cmap="rainbow",
+        cmap=cmap,
         alpha=1,
         vmin=np.nanmin(data),
         vmax=np.nanmax(data),
@@ -393,6 +574,10 @@ def draw(
     cbar.ax.tick_params(labelsize=16)
     plt.xlabel(x_label, fontsize=30)
     plt.ylabel(y_label, fontsize=30)
+    if x_ticks is not None:
+        plt.xticks(ticks=x_ticks)
+    if y_ticks is not None:
+        plt.yticks(ticks=y_ticks)
     plt.tick_params(axis="both", which="major", labelsize=18)
     plt.gca().set_facecolor("white")
 
@@ -738,7 +923,41 @@ def _iter_centers(center):
     return np.atleast_2d(center)
 
 
+def _normalize_axis_key(noaxis):
+    if noaxis is None:
+        return None
+    return str(noaxis).strip()
+
+
+def _latex_number(value):
+    value = float(value)
+    if np.isclose(value, 0.0):
+        value = 0.0
+    return format(value, "g")
+
+
+def _latex_fixed_number(value, decimals=2):
+    value = float(value)
+    if np.isclose(value, 0.0):
+        value = 0.0
+    return f"{value:.{decimals}f}"
+
+
+def _latex_tick_formatter(value, _pos=None):
+    return rf"${_latex_number(value)}$"
+
+
+def _latex_center_label(index, center_point):
+    return (
+        rf"$\boldsymbol{{c}}_{{{index}}}"
+        rf"=\left({_latex_fixed_number(center_point[0])},\,"
+        rf"{_latex_fixed_number(center_point[1])},\,"
+        rf"{_latex_fixed_number(center_point[2])}\right)$"
+    )
+
+
 def _plot_center_markers(ax, center, noaxis, domain_min, domain_max, layout):
+    noaxis = _normalize_axis_key(noaxis)
     centers = _iter_centers(center)
     if centers.size == 0:
         return
@@ -755,17 +974,15 @@ def _plot_center_markers(ax, center, noaxis, domain_min, domain_max, layout):
                     color="black",
                     s=100,
                     marker="x",
-                    edgecolors="black",
                     zorder=200,
                 )
                 ax.text(
                     center_point[0] + 0.3,
                     center_point[1] + 0.34,
                     center_point[2] - 0.1,
-                    f"${{\\boldsymbol{{c}}_{{{i+1}}}}}$:({center_point[0]:.2f}, {center_point[1]:.2f}, {center_point[2]:.2f})",
+                    _latex_center_label(i + 1, center_point),
                     color="black",
                     fontsize=16,
-                    fontweight="bold",
                     ha="left",
                     va="center",
                     zorder=200,
@@ -788,7 +1005,6 @@ def _plot_center_markers(ax, center, noaxis, domain_min, domain_max, layout):
                     color="black",
                     s=100,
                     marker="x",
-                    edgecolors="black",
                     zorder=200,
                 )
                 ax.set_zlabel("", fontsize=0, labelpad=0)
@@ -804,10 +1020,9 @@ def _plot_center_markers(ax, center, noaxis, domain_min, domain_max, layout):
                     center_point[0] + 0.3,
                     center_point[1] - 0.2,
                     center_point[2] - 0.1,
-                    f"${{\\boldsymbol{{c}}_{{{i+1}}}}}$:({center_point[0]:.2f}, {center_point[1]:.2f}, {center_point[2]:.2f})",
+                    _latex_center_label(i + 1, center_point),
                     color="black",
                     fontsize=16,
-                    fontweight="bold",
                     ha="left",
                     va="center",
                     zorder=200,
@@ -835,17 +1050,15 @@ def _plot_center_markers(ax, center, noaxis, domain_min, domain_max, layout):
                     color="black",
                     s=100,
                     marker="x",
-                    edgecolors="black",
                     zorder=200,
                 )
                 ax.text(
                     center_point[0] + 0.15,
                     center_point[1] - 0.32,
                     center_point[2] - 0.1,
-                    f"${{\\boldsymbol{{c}}_{{{i+1}}}}}$:({center_point[0]:.2f}, {center_point[1]:.2f}, {center_point[2]:.2f})",
+                    _latex_center_label(i + 1, center_point),
                     color="black",
                     fontsize=16,
-                    fontweight="bold",
                     ha="left",
                     va="center",
                     zorder=200,
@@ -873,17 +1086,15 @@ def _plot_center_markers(ax, center, noaxis, domain_min, domain_max, layout):
                 color="black",
                 s=100,
                 marker="x",
-                edgecolors="black",
                 zorder=200,
             )
             ax.text(
                 center_point[0] + 0.4,
                 center_point[1] + 0.4,
                 center_point[2] - 0.1,
-                f"${{\\boldsymbol{{c}}_{{{i+1}}}}}$:({center_point[0]:.2f}, {center_point[1]:.2f}, {center_point[2]:.2f})",
+                _latex_center_label(i + 1, center_point),
                 color="black",
                 fontsize=16,
-                fontweight="bold",
                 ha="left",
                 va="center",
                 zorder=200,
@@ -913,17 +1124,15 @@ def _plot_center_markers(ax, center, noaxis, domain_min, domain_max, layout):
                 color="black",
                 s=100,
                 marker="x",
-                edgecolors="black",
                 zorder=200,
             )
             ax.text(
                 center_point[0] + 0.4,
                 center_point[1] + 0.4,
                 center_point[2] - 0.1,
-                f"${{\\boldsymbol{{c}}_{{{i+1}}}}}$:({center_point[0]:.2f}, {center_point[1]:.2f}, {center_point[2]:.2f})",
+                _latex_center_label(i + 1, center_point),
                 color="black",
                 fontsize=16,
-                fontweight="bold",
                 ha="left",
                 va="center",
                 zorder=200,
@@ -952,17 +1161,15 @@ def _plot_center_markers(ax, center, noaxis, domain_min, domain_max, layout):
                 color="black",
                 s=100,
                 marker="x",
-                edgecolors="black",
                 zorder=200,
             )
             ax.text(
                 center_point[0] + 0.1,
                 center_point[1] + 0.3,
                 center_point[2] - 0.1,
-                f"${{\\boldsymbol{{c}}_{{{i+1}}}}}$:({center_point[0]:.2f}, {center_point[1]:.2f}, {center_point[2]:.2f})",
+                _latex_center_label(i + 1, center_point),
                 color="black",
                 fontsize=16,
-                fontweight="bold",
                 ha="left",
                 va="center",
                 zorder=200,
@@ -976,6 +1183,48 @@ def _plot_center_markers(ax, center, noaxis, domain_min, domain_max, layout):
                 linewidth=2,
                 zorder=200,
             )
+
+
+def _apply_3d_axis_style(
+    ax,
+    noaxis,
+    x_ticks=None,
+    y_ticks=None,
+    z_ticks=None,
+    xlabel=r"$x_1$",
+    ylabel=r"$x_2$",
+    zlabel=r"$x_3$",
+    tick_size=18,
+    label_size=25,
+):
+    noaxis = _normalize_axis_key(noaxis)
+
+    if noaxis != "x1":
+        ax.set_xlabel(xlabel, fontsize=label_size, labelpad=15)
+        ax.tick_params(axis="x", which="major", labelsize=tick_size, pad=8)
+        if x_ticks is not None:
+            ax.set_xticks(x_ticks)
+    else:
+        ax.tick_params(axis="x", which="major", labelsize=0, pad=6)
+        ax.set_xlabel("", fontsize=0, labelpad=0)
+
+    if noaxis != "x2":
+        ax.set_ylabel(ylabel, fontsize=label_size, labelpad=20)
+        ax.tick_params(axis="y", which="major", labelsize=tick_size, pad=8)
+        if y_ticks is not None:
+            ax.set_yticks(y_ticks)
+    else:
+        ax.tick_params(axis="y", which="major", labelsize=0, pad=6)
+        ax.set_ylabel("", fontsize=0, labelpad=0)
+
+    if noaxis != "x3":
+        ax.set_zlabel(zlabel, fontsize=label_size, labelpad=15)
+        ax.tick_params(axis="z", which="major", labelsize=tick_size, pad=8)
+        if z_ticks is not None:
+            ax.set_zticks(z_ticks)
+    else:
+        ax.tick_params(axis="z", which="major", labelsize=0, pad=6)
+        ax.set_zlabel("", fontsize=0, labelpad=0)
 
 
 def _plot_grad_view(mapped_mask_points, grad_values, domain_min, domain_max, elev, azim, full_output_path, dpi, layout):
@@ -1044,10 +1293,22 @@ def _plot_s_view(
     full_output_path,
     dpi,
     layout,
+    surface_volume=None,
+    surface_level=None,
+    x_ticks=None,
+    y_ticks=None,
+    z_ticks=None,
+    colorbar_ticks=None,
+    xlabel=r"$x_1$",
+    ylabel=r"$x_2$",
+    zlabel=r"$x_3$",
+    colorbar_label=r"$S^{(0)}$",
+    cmap="viridis",
+    show_grid=True,
 ):
     norm = plt.Normalize(vmin=np.min(s_values), vmax=np.max(s_values))
     norm_s = plt.Normalize(vmin=np.min(s_values), vmax=np.max(s_values))
-    cmap_s = plt.get_cmap("rainbow")
+    cmap_s = plt.get_cmap(cmap)
     colors_s = cmap_s(norm_s(s_values))
 
     fig = plt.figure(figsize=(10, 10))
@@ -1060,20 +1321,48 @@ def _plot_s_view(
     if layout == "donut":
         ax.tick_params(axis="both", which="major", labelsize=16, pad=6)
         ax.tick_params(axis="x", which="major", labelsize=16, pad=6)
-        ax.set_xlabel("$x_1$", fontsize=25, labelpad=20)
-        ax.set_ylabel("$x_2$", fontsize=25, labelpad=20)
-        ax.set_zlabel("$x_3$", fontsize=25, labelpad=15)
+        ax.set_xlabel(xlabel, fontsize=25, labelpad=20)
+        ax.set_ylabel(ylabel, fontsize=25, labelpad=20)
+        ax.set_zlabel(zlabel, fontsize=25, labelpad=15)
         set_axes_equal(ax)
     else:
         ax.tick_params(axis="both", which="major", labelsize=18, pad=6)
-        ax.set_xlabel("$x_1$", fontsize=25, labelpad=15)
-        ax.set_ylabel("$x_2$", fontsize=25, labelpad=20)
-        ax.set_zlabel("$x_3$", fontsize=25, labelpad=15)
+        ax.set_xlabel(xlabel, fontsize=25, labelpad=15)
+        ax.set_ylabel(ylabel, fontsize=25, labelpad=20)
+        ax.set_zlabel(zlabel, fontsize=25, labelpad=15)
 
     ax.set_box_aspect([1, 1, 1])
     ax.view_init(elev=elev, azim=azim)
-    _plot_center_markers(ax, center, noaxis, domain_min, domain_max, layout)
+    # _plot_center_markers(ax, center, noaxis, domain_min, domain_max, layout)
+    _apply_3d_axis_style(
+        ax,
+        noaxis,
+        x_ticks=x_ticks,
+        y_ticks=y_ticks,
+        z_ticks=z_ticks,
+        xlabel=xlabel,
+        ylabel=ylabel,
+        zlabel=zlabel,
+    )
     ax.dist = 10
+
+    if surface_volume is not None and surface_level is not None:
+        visualizer = MeshVisualizer3D()
+        visualizer.domain_min = domain_min
+        visualizer.domain_max = domain_max
+        visualizer.plot_isosurface(
+            surface_volume,
+            level=surface_level,
+            color="#6CB6E9",
+            alpha=0.22,
+            show_wireframe=False,
+            show_center=False,
+            center=None,
+            elev=elev,
+            azim=azim,
+            save_path=None,
+            ax=ax,
+        )
 
     ax.scatter(
         mapped_mask_points[:, 0],
@@ -1085,14 +1374,106 @@ def _plot_s_view(
         edgecolors="none",
     )
 
-    cmap = plt.get_cmap("rainbow")
-    mappable = plt.cm.ScalarMappable(norm=norm, cmap=cmap)
+    cmap_obj = plt.get_cmap(cmap)
+    mappable = plt.cm.ScalarMappable(norm=norm, cmap=cmap_obj)
     mappable.set_array([])
     cbar = plt.colorbar(mappable, ax=ax, shrink=0.5, pad=0.01)
+    cbar.set_label(colorbar_label, fontsize=20)
     cbar.ax.tick_params(labelsize=20)
+    if colorbar_ticks is not None:
+        cbar.set_ticks(colorbar_ticks)
 
-    ax.grid(True, linestyle="--", alpha=0.3)
+    ax.grid(show_grid, linestyle="--", alpha=0.3)
     plt.savefig(full_output_path, dpi=dpi, bbox_inches="tight", pad_inches=0.05)
+    plt.show()
+
+
+def _plot_surface_only_view(
+    surface_volume,
+    surface_level,
+    surface_color_values,
+    domain_min,
+    domain_max,
+    elev,
+    azim,
+    center,
+    noaxis,
+    full_output_path,
+    dpi,
+    layout,
+    x_ticks=None,
+    y_ticks=None,
+    z_ticks=None,
+    colorbar_ticks=None,
+    xlabel=r"$x_1$",
+    ylabel=r"$x_2$",
+    zlabel=r"$x_3$",
+    colorbar_label=r"$S^{(0)}$",
+    cmap="viridis",
+    show_grid=True,
+):
+    fig = plt.figure(figsize=(10, 10))
+    ax = fig.add_subplot(111, projection="3d", facecolor="white")
+    ax.set_position([0.02, 0.02, 0.80, 0.96])
+    ax.set_xlim([domain_min[0], domain_max[0]])
+    ax.set_ylim([domain_min[1], domain_max[1]])
+    ax.set_zlim([domain_min[2], domain_max[2]])
+
+    if layout == "donut":
+        ax.tick_params(axis="both", which="major", labelsize=16, pad=6)
+        ax.tick_params(axis="x", which="major", labelsize=16, pad=6)
+        ax.set_xlabel(xlabel, fontsize=25, labelpad=20)
+        ax.set_ylabel(ylabel, fontsize=25, labelpad=20)
+        ax.set_zlabel(zlabel, fontsize=25, labelpad=15)
+        set_axes_equal(ax)
+    else:
+        ax.tick_params(axis="both", which="major", labelsize=18, pad=6)
+        ax.set_xlabel(xlabel, fontsize=25, labelpad=15)
+        ax.set_ylabel(ylabel, fontsize=25, labelpad=20)
+        ax.set_zlabel(zlabel, fontsize=25, labelpad=15)
+
+    ax.set_box_aspect([1, 1, 1])
+    ax.view_init(elev=elev, azim=azim)
+    ax.grid(show_grid, linestyle="--", alpha=0.3)
+
+    for axis in (ax.xaxis, ax.yaxis, ax.zaxis):
+        axis.pane.set_facecolor((1.0, 1.0, 1.0, 0.0))
+        axis.pane.set_edgecolor((0.75, 0.75, 0.75, 0.45))
+
+    visualizer = MeshVisualizer3D()
+    visualizer.domain_min = domain_min
+    visualizer.domain_max = domain_max
+    visualizer.plot_isosurface(
+        surface_volume,
+        level=surface_level,
+        alpha=0.95,
+        show_wireframe=False,
+        show_center=False,
+        center=None,
+        elev=elev,
+        azim=azim,
+        save_path=None,
+        ax=ax,
+        scalar_field=surface_color_values,
+        cmap=cmap,
+        show_colorbar=True,
+        colorbar_ticks=colorbar_ticks,
+        colorbar_label=colorbar_label,
+    )
+
+    # _plot_center_markers(ax, center, noaxis, domain_min, domain_max, layout)
+    _apply_3d_axis_style(
+        ax,
+        noaxis,
+        x_ticks=x_ticks,
+        y_ticks=y_ticks,
+        z_ticks=z_ticks,
+        xlabel=xlabel,
+        ylabel=ylabel,
+        zlabel=zlabel,
+    )
+
+    plt.savefig(full_output_path, dpi=dpi, bbox_inches="tight", pad_inches=0.02)
     plt.show()
 
 
@@ -1112,9 +1493,22 @@ def filter_q_3d(
     output_filename="plot_3d.png",
     dpi=300,
     layout="auto",
+    render_mode="overlay",
+    x_ticks=None,
+    y_ticks=None,
+    z_ticks=None,
+    colorbar_ticks=None,
+    xlabel=r"$x_1$",
+    ylabel=r"$x_2$",
+    zlabel=r"$x_3$",
+    colorbar_label=r"$S^{(0)}$",
+    cmap="viridis",
+    show_grid=True,
 ):
     if dpi is None:
         dpi = 300
+
+    noaxis = _normalize_axis_key(noaxis)
 
     if output_directory and not os.path.exists(output_directory):
         os.makedirs(output_directory)
@@ -1154,19 +1548,57 @@ def filter_q_3d(
         )
     elif choose == "S":
         s_values = S_num[mask]
-        _plot_s_view(
-            mapped_mask_points,
-            s_values,
-            domain_min,
-            domain_max,
-            elev,
-            azim,
-            center,
-            noaxis,
-            full_output_path,
-            dpi,
-            layout,
-        )
+        if render_mode == "surface_only":
+            _plot_surface_only_view(
+                surface_volume=mask.astype(float),
+                surface_level=0.5,
+                surface_color_values=S_num,
+                domain_min=domain_min,
+                domain_max=domain_max,
+                elev=elev,
+                azim=azim,
+                center=center,
+                noaxis=noaxis,
+                full_output_path=full_output_path,
+                dpi=dpi,
+                layout=layout,
+                x_ticks=x_ticks,
+                y_ticks=y_ticks,
+                z_ticks=z_ticks,
+                colorbar_ticks=colorbar_ticks,
+                xlabel=xlabel,
+                ylabel=ylabel,
+                zlabel=zlabel,
+                colorbar_label=colorbar_label,
+                cmap=cmap,
+                show_grid=show_grid,
+            )
+        else:
+            _plot_s_view(
+                mapped_mask_points,
+                s_values,
+                domain_min,
+                domain_max,
+                elev,
+                azim,
+                center,
+                noaxis,
+                full_output_path,
+                dpi,
+                layout,
+                surface_volume=mask.astype(float),
+                surface_level=0.5,
+                x_ticks=x_ticks,
+                y_ticks=y_ticks,
+                z_ticks=z_ticks,
+                colorbar_ticks=colorbar_ticks,
+                xlabel=xlabel,
+                ylabel=ylabel,
+                zlabel=zlabel,
+                colorbar_label=colorbar_label,
+                cmap=cmap,
+                show_grid=show_grid,
+            )
 
     return (
         mapped_mask_points,
