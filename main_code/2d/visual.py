@@ -182,6 +182,14 @@ def draw(
     colorbar_tick_size=VISUAL_COLORBAR_TICK_SIZE,
     tick_format=VISUAL_TICK_FORMAT,
     colorbar_tick_format="{:.2f}",
+    x_ticks=None,
+    y_ticks=None,
+    arc_alpha=None,
+    arc_radius=0.5,
+    arc_center=(0.0, 0.0),
+    arc_color="red",
+    arc_linewidth=2.0,
+    arc_linestyle="-",
 ):
     """Draw a 2D contour map with legacy positional-call compatibility."""
     if len(args) == 0:
@@ -207,6 +215,12 @@ def draw(
 
     full_output_path = _resolve_output_path(output_directory, output_filename)
 
+    # 根据是否有 arc 参数确定绘图范围
+    if arc_alpha is not None:
+        plot_limits = [-0.5, 0.5]
+    else:
+        plot_limits =[np.min(X),np.max(Y)]
+
     plt.figure(figsize=(8, 6))
     contour_fill = plt.contourf(
         X,
@@ -219,6 +233,22 @@ def draw(
         vmax=np.nanmax(data),
     )
     ax = plt.gca()
+    
+    # 设置坐标轴范围
+    ax.set_xlim(plot_limits)
+    ax.set_ylim(plot_limits)
+    if arc_alpha is not None:
+        theta = np.linspace(0.0, 2.0 * np.pi * float(arc_alpha), 500)
+        arc_x = float(arc_center[0]) + float(arc_radius) * np.cos(theta)
+        arc_y = float(arc_center[1]) + float(arc_radius) * np.sin(theta)
+        ax.plot(
+            arc_x,
+            arc_y,
+            color=arc_color,
+            linewidth=arc_linewidth,
+            linestyle=arc_linestyle,
+            zorder=5,
+        )
 
     cbar = plt.colorbar(contour_fill, shrink=1, aspect=12)
     cbar.ax.tick_params(labelsize=colorbar_tick_size)
@@ -232,6 +262,10 @@ def draw(
     plt.ylabel(r"$x_2$", fontsize=label_size)
     plt.tick_params(axis="both", which="major", labelsize=tick_size)
     formatter = _make_tick_formatter(tick_format)
+    if x_ticks is not None:
+        ax.set_xticks(x_ticks)
+    if y_ticks is not None:
+        ax.set_yticks(y_ticks)
     ax.xaxis.set_major_formatter(formatter)
     ax.yaxis.set_major_formatter(formatter)
     ax.set_facecolor("white")
@@ -311,7 +345,17 @@ def _collect_leaf_cells(cells):
     return leaf_cells
 
 
-def _format_plain_axis(ax, xlim, ylim, xlabel_size=32, ylabel_size=32, tick_size=18):
+def _format_plain_axis(
+    ax,
+    xlim,
+    ylim,
+    xlabel_size=32,
+    ylabel_size=32,
+    tick_size=18,
+    x_ticks=None,
+    y_ticks=None,
+    tick_format=VISUAL_TICK_FORMAT,
+):
     ax.set_xlim(xlim[0], xlim[1])
     ax.set_ylim(ylim[0], ylim[1])
     ax.set_aspect("equal", adjustable="box")
@@ -319,6 +363,13 @@ def _format_plain_axis(ax, xlim, ylim, xlabel_size=32, ylabel_size=32, tick_size
     ax.set_xlabel(r"$x_1$", fontsize=xlabel_size)
     ax.set_ylabel(r"$x_2$", fontsize=ylabel_size)
     ax.tick_params(axis="both", which="major", labelsize=tick_size)
+    if x_ticks is not None:
+        ax.set_xticks(x_ticks)
+    if y_ticks is not None:
+        ax.set_yticks(y_ticks)
+    formatter = _make_tick_formatter(tick_format)
+    ax.xaxis.set_major_formatter(formatter)
+    ax.yaxis.set_major_formatter(formatter)
 
 
 def _draw_cell_mesh_on_axis(ax, cells, linewidth=0.8):
@@ -748,6 +799,9 @@ def plot_cell_mesh_and_noise_centers(
     show_legend=True,
     label_size=42,
     tick_size=22,
+    x_ticks=None,
+    y_ticks=None,
+    tick_format=VISUAL_TICK_FORMAT,
 ):
     """Overlay adaptive cells and local circular-basis centers in one axis."""
     cells = load_cells_from_pickle(cells_path)
@@ -788,7 +842,17 @@ def plot_cell_mesh_and_noise_centers(
         legend_fontsize=12,
         show_legend=show_legend,
     )
-    _format_plain_axis(ax, xlim, ylim, xlabel_size=label_size, ylabel_size=label_size, tick_size=tick_size)
+    _format_plain_axis(
+        ax,
+        xlim,
+        ylim,
+        xlabel_size=label_size,
+        ylabel_size=label_size,
+        tick_size=tick_size,
+        x_ticks=x_ticks,
+        y_ticks=y_ticks,
+        tick_format=tick_format,
+    )
 
     fig.tight_layout(rect=[0, 0, 1, 1])
     if output_filename:
@@ -1526,7 +1590,17 @@ class GridMeshVisualizer:
         plt.show()
         return fig
 
-    def _scale(self, fig, ax, kidney_bound):
+    def _scale(
+        self,
+        fig,
+        ax,
+        kidney_bound,
+        label_size=VISUAL_LABEL_SIZE,
+        tick_size=VISUAL_TICK_SIZE,
+        tick_format="{:g}",
+        x_ticks=None,
+        y_ticks=None,
+    ):
         if self.contour_points_implicit is None:
             self.contour_points_implicit = self._load_true_boundary()
         if self.contour_points_implicit is None or bound_detect is None:
@@ -1553,13 +1627,17 @@ class GridMeshVisualizer:
         colors = ["#470eaa", "#fb5817"]
         for i, d in enumerate(offset_distances):
             ax.plot(contour_points_scaled[i, :, 0], contour_points_scaled[i, :, 1], color=colors[i], linewidth=1, label=rf"Offset boundary($\rho={d}$)")
-        ax.set_xlim(0, 1)
-        ax.set_ylim(0, 1)
-        ax.set_aspect("equal")
-        ax.grid(True, linestyle=":", alpha=0.2)
-        ax.set_xlabel("$x_1$", fontsize=40)
-        ax.set_ylabel("$x_2$", fontsize=40)
-        ax.tick_params(axis="both", which="major", labelsize=22)
+        _format_plain_axis(
+            ax,
+            (0.0, 1.0),
+            (0.0, 1.0),
+            xlabel_size=label_size,
+            ylabel_size=label_size,
+            tick_size=tick_size,
+            x_ticks=x_ticks,
+            y_ticks=y_ticks,
+            tick_format=tick_format,
+        )
         ax.legend(fontsize=22, loc="best")
         self._safe_layout(fig, bottom=0.14)
         return fig
@@ -1658,6 +1736,11 @@ class GridMeshVisualizer:
         kidney_bound,
         noise_dir="./noise=5%",
         output_filename="scale_and_local_basis.pdf",
+        label_size=VISUAL_LABEL_SIZE,
+        tick_size=VISUAL_TICK_SIZE,
+        tick_format="{:g}",
+        x_ticks=None,
+        y_ticks=None,
     ):
         if self.contour_points_implicit is None or bound_detect is None:
             raise RuntimeError("Kidney boundary helpers are unavailable.")
@@ -1741,13 +1824,17 @@ class GridMeshVisualizer:
                 zorder=6,
             )
 
-        ax.set_xlim(0, 1)
-        ax.set_ylim(0, 1)
-        ax.set_aspect("equal")
-        ax.grid(True, linestyle=":", alpha=0.2)
-        ax.set_xlabel("$x_1$", fontsize=40)
-        ax.set_ylabel("$x_2$", fontsize=40)
-        ax.tick_params(axis="both", which="major", labelsize=22)
+        _format_plain_axis(
+            ax,
+            (0.0, 1.0),
+            (0.0, 1.0),
+            xlabel_size=label_size,
+            ylabel_size=label_size,
+            tick_size=tick_size,
+            x_ticks=x_ticks,
+            y_ticks=y_ticks,
+            tick_format=tick_format,
+        )
         ax.legend(fontsize=18, loc="best")
         self._safe_layout(fig, bottom=0.14)
 
