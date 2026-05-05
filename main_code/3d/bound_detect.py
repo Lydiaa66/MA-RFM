@@ -1,4 +1,5 @@
 import os
+import re
 import cv2
 import matplotlib as mpl
 import matplotlib.pyplot as plt
@@ -7,6 +8,43 @@ from scipy.ndimage import binary_closing, binary_dilation, binary_erosion
 from sklearn.cluster import DBSCAN
 
 mpl.rcdefaults()
+
+EXAMPLE_DIR_PATTERN = re.compile(r"^Ex\d+\.\d+$", re.IGNORECASE)
+
+
+def _infer_example_prefix_from_path(path):
+    if not path:
+        return None
+    normalized = os.path.abspath(os.path.expanduser(str(path)))
+    for part in reversed(re.split(r"[\\/]+", normalized)):
+        if EXAMPLE_DIR_PATTERN.fullmatch(part):
+            return part.lower()
+    return None
+
+
+def _infer_example_prefix(*paths):
+    for path in paths:
+        prefix = _infer_example_prefix_from_path(path)
+        if prefix:
+            return prefix
+    return _infer_example_prefix_from_path(os.getcwd())
+
+
+def _prefix_filename_for_example(filename, *paths):
+    if not filename:
+        return filename
+    prefix = _infer_example_prefix(*paths)
+    if not prefix:
+        return filename
+    if filename.lower().startswith(prefix + "_"):
+        return filename
+    return f"{prefix}_{filename}"
+
+
+def _resolve_output_path(output_directory, output_filename):
+    directory = output_directory or "."
+    filename = _prefix_filename_for_example(output_filename, directory)
+    return os.path.join(directory, filename)
 
 
 def _resolve_field_array(field, name):
@@ -1282,7 +1320,7 @@ def detect_shape_3d(
     elif not output_directory:
         output_directory = "."
 
-    fig.savefig(os.path.join(output_directory, output_filename or "plot3d.png"), dpi=300, bbox_inches="tight", pad_inches=0.4)
+    fig.savefig(_resolve_output_path(output_directory, output_filename or "plot3d.png"), dpi=300, bbox_inches="tight", pad_inches=0.4)
     plt.show()
     plt.close(fig)
     return results

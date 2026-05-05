@@ -1,12 +1,60 @@
 import os
+import re
 from skimage import measure
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 import numpy as np
 from matplotlib.colors import LinearSegmentedColormap, to_rgba
+from matplotlib.ticker import FuncFormatter
 from mpl_toolkits.mplot3d.art3d import Line3DCollection,Poly3DCollection
 
 plt.rcParams["mathtext.fontset"] = "cm"
+
+EXAMPLE_DIR_PATTERN = re.compile(r"^Ex\d+\.\d+$", re.IGNORECASE)
+
+
+def _infer_example_prefix_from_path(path):
+    if not path:
+        return None
+    normalized = os.path.abspath(os.path.expanduser(str(path)))
+    for part in reversed(re.split(r"[\\/]+", normalized)):
+        if EXAMPLE_DIR_PATTERN.fullmatch(part):
+            return part.lower()
+    return None
+
+
+def _infer_example_prefix(*paths):
+    for path in paths:
+        prefix = _infer_example_prefix_from_path(path)
+        if prefix:
+            return prefix
+    return _infer_example_prefix_from_path(os.getcwd())
+
+
+def _prefix_filename_for_example(filename, *paths):
+    if not filename:
+        return filename
+    prefix = _infer_example_prefix(*paths)
+    if not prefix:
+        return filename
+    if filename.lower().startswith(prefix + "_"):
+        return filename
+    return f"{prefix}_{filename}"
+
+
+def _resolve_output_path(output_directory, output_filename):
+    directory = output_directory or "."
+    filename = _prefix_filename_for_example(output_filename, directory)
+    return os.path.join(directory, filename)
+
+
+def _resolve_save_path(save_path):
+    if not save_path:
+        return save_path
+    directory = os.path.dirname(save_path)
+    filename = os.path.basename(save_path)
+    prefixed = _prefix_filename_for_example(filename, save_path, directory)
+    return os.path.join(directory, prefixed) if directory else prefixed
 
 
 class MeshVisualizer3D:
@@ -58,6 +106,7 @@ class MeshVisualizer3D:
         plt.tight_layout()
         
         if save_path:
+            save_path = _resolve_save_path(save_path)
             plt.savefig(save_path, dpi=300, bbox_inches='tight')
             print(f"Figure saved to: {save_path}")
         
@@ -192,6 +241,7 @@ class MeshVisualizer3D:
         plt.tight_layout()
         
         if save_path:
+            save_path = _resolve_save_path(save_path)
             plt.savefig(save_path, dpi=300, bbox_inches='tight')
             print(f"Solution and mesh analysis plot saved to: {save_path}")
         
@@ -248,6 +298,7 @@ class MeshVisualizer3D:
         plt.tight_layout()
         
         if save_path:
+            save_path = _resolve_save_path(save_path)
             plt.savefig(save_path, dpi=300, bbox_inches='tight')
             print(f"Refinement history plot saved to: {save_path}")
         
@@ -308,6 +359,7 @@ class MeshVisualizer3D:
         ax.set_ylabel('Y')
         
         if save_path:
+            save_path = _resolve_save_path(save_path)
             plt.savefig(save_path, dpi=300, bbox_inches='tight')
             print(f"Detailed mesh plot saved to: {save_path}")
         
@@ -334,6 +386,7 @@ class MeshVisualizer3D:
         show_colorbar=False,
         colorbar_ticks=None,
         colorbar_label=r"$S^{(0)}$",
+        rasterized=False,
     ):
         """
         Plot a shaded isosurface.
@@ -433,6 +486,7 @@ class MeshVisualizer3D:
             linewidths=0.15,
             edgecolors=(0.1, 0.1, 0.1, 0.15) if show_wireframe else "none",
         )
+        mesh.set_rasterized(rasterized)
         mesh.set_facecolors(face_colors)
 
         created_figure = ax is None
@@ -485,7 +539,7 @@ class MeshVisualizer3D:
                 title = f"Isosurface at level = {level:.4f}"
             ax.set_title(title, fontsize=12)
             if save_path:
-                plt.savefig(save_path, dpi=300, bbox_inches="tight")
+                plt.savefig(_resolve_save_path(save_path), dpi=300, bbox_inches="tight")
             plt.show()
 
         return mesh
@@ -555,8 +609,8 @@ def draw(
     elif not output_directory:
         output_directory = "."
 
-    full_output_path1 = os.path.join(output_directory, output_filename1)
-    full_output_path2 = os.path.join(output_directory, output_filename2)
+    full_output_path1 = _resolve_output_path(output_directory, output_filename1)
+    full_output_path2 = _resolve_output_path(output_directory, output_filename2)
 
     data = np.asarray(data)
     plt.figure(figsize=(8, 6))
@@ -669,25 +723,24 @@ def draw(
             ax.text(
                 idx,
                 y_pos,
-                f"{xx}={x_val:.2f}",
+                f"{xx}=${x_val:.2f}$",
                 color="red",
                 fontsize=12,
                 rotation=0,
                 va="bottom",
                 ha="center",
                 transform=ax.get_xaxis_transform(),
-                weight="bold",
             )
 
-        plt.xlabel(xx, fontsize=20)
-        plt.tick_params(axis="y", labelsize=14)
+        plt.xlabel(xx, fontsize=24)
+        plt.tick_params(axis="y", labelsize=12)
         n_ticks = 7
         x_labels = np.round(np.linspace(np.min(X), np.max(X), n_ticks), decimals=2)
         plt.xticks(
             ticks=np.linspace(0, data.shape[1] - 1, n_ticks),
             labels=x_labels,
             rotation=0,
-            fontsize=14,
+            fontsize=12,
         )
         plt.savefig(full_output_path2, dpi=300, bbox_inches="tight")
         print(f"Plot saved as {full_output_path2}")
@@ -714,7 +767,7 @@ def visualize_3d_grid(
             os.makedirs(output_directory)
         elif not output_directory:
             output_directory = "."
-        full_output_path = os.path.join(output_directory, output_filename)
+        full_output_path = _resolve_output_path(output_directory, output_filename)
 
     if not cells:
         print("No cells to visualize.")
@@ -926,7 +979,18 @@ def _iter_centers(center):
 def _normalize_axis_key(noaxis):
     if noaxis is None:
         return None
-    return str(noaxis).strip()
+    key = str(noaxis).strip().lower()
+    key = key.replace("$", "").replace("\\", "").replace("{", "").replace("}", "")
+    key = key.replace("_", "").replace(" ", "")
+    aliases = {
+        "x": "x1",
+        "x1": "x1",
+        "y": "x2",
+        "x2": "x2",
+        "z": "x3",
+        "x3": "x3",
+    }
+    return aliases.get(key, key)
 
 
 def _latex_number(value):
@@ -934,6 +998,35 @@ def _latex_number(value):
     if np.isclose(value, 0.0):
         value = 0.0
     return format(value, "g")
+
+
+def _compact_tick_label(value):
+    value = float(value)
+    if np.isclose(value, 0.0):
+        value = 0.0
+    if np.isclose(value, round(value)):
+        return f"{value:.1f}"
+    return f"{value:.2f}".rstrip("0").rstrip(".")
+
+
+def _compact_tick_formatter(value, _pos=None):
+    return _compact_tick_label(value)
+
+
+def _set_compact_axis_ticks(axis_obj, set_ticks, ticks, hide_endpoints=False, hide_first=False, hide_last=False):
+    if ticks is None:
+        axis_obj.set_major_formatter(FuncFormatter(_compact_tick_formatter))
+        return
+    set_ticks(ticks)
+    labels = [_compact_tick_label(value) for value in ticks]
+    if hide_endpoints and len(labels) >= 2:
+        labels[0] = ""
+        labels[-1] = ""
+    if hide_first and labels:
+        labels[0] = ""
+    if hide_last and labels:
+        labels[-1] = ""
+    axis_obj.set_ticklabels(labels)
 
 
 def _latex_fixed_number(value, decimals=2):
@@ -1188,6 +1281,8 @@ def _plot_center_markers(ax, center, noaxis, domain_min, domain_max, layout):
 def _apply_3d_axis_style(
     ax,
     noaxis,
+    domain_min=None,
+    domain_max=None,
     x_ticks=None,
     y_ticks=None,
     z_ticks=None,
@@ -1196,32 +1291,63 @@ def _apply_3d_axis_style(
     zlabel=r"$x_3$",
     tick_size=18,
     label_size=25,
+    x_tick_pad=8,
+    y_tick_pad=8,
+    z_tick_pad=8,
+    x_label_pad=15,
+    y_label_pad=20,
+    z_label_pad=15,
+    zlabel_position="default",
+    hide_duplicate_corner_ticks=False,
 ):
     noaxis = _normalize_axis_key(noaxis)
+    hide_x_endpoints = False
+    hide_y_endpoints = hide_duplicate_corner_ticks and noaxis is None
+    hide_z_endpoints = False
+    hide_x_first = hide_duplicate_corner_ticks and noaxis == "x3"
+    hide_y_first = False
+    hide_z_first = hide_duplicate_corner_ticks and noaxis == "x1"
 
     if noaxis != "x1":
-        ax.set_xlabel(xlabel, fontsize=label_size, labelpad=15)
-        ax.tick_params(axis="x", which="major", labelsize=tick_size, pad=8)
-        if x_ticks is not None:
-            ax.set_xticks(x_ticks)
+        ax.set_xlabel(xlabel, fontsize=label_size, labelpad=x_label_pad)
+        ax.tick_params(axis="x", which="major", labelsize=tick_size, pad=x_tick_pad)
+        _set_compact_axis_ticks(ax.xaxis, ax.set_xticks, x_ticks, hide_x_endpoints, hide_first=hide_x_first)
     else:
         ax.tick_params(axis="x", which="major", labelsize=0, pad=6)
         ax.set_xlabel("", fontsize=0, labelpad=0)
 
     if noaxis != "x2":
-        ax.set_ylabel(ylabel, fontsize=label_size, labelpad=20)
-        ax.tick_params(axis="y", which="major", labelsize=tick_size, pad=8)
-        if y_ticks is not None:
-            ax.set_yticks(y_ticks)
+        ax.set_ylabel(ylabel, fontsize=label_size, labelpad=y_label_pad)
+        ax.tick_params(axis="y", which="major", labelsize=tick_size, pad=y_tick_pad)
+        _set_compact_axis_ticks(ax.yaxis, ax.set_yticks, y_ticks, hide_y_endpoints, hide_first=hide_y_first)
     else:
         ax.tick_params(axis="y", which="major", labelsize=0, pad=6)
         ax.set_ylabel("", fontsize=0, labelpad=0)
 
     if noaxis != "x3":
-        ax.set_zlabel(zlabel, fontsize=label_size, labelpad=15)
-        ax.tick_params(axis="z", which="major", labelsize=tick_size, pad=8)
-        if z_ticks is not None:
-            ax.set_zticks(z_ticks)
+        if zlabel_position == "upper_left":
+            ax.set_zlabel("", fontsize=0, labelpad=0)
+            ax.text2D(-0.06, 0.72, zlabel, transform=ax.transAxes, fontsize=label_size)
+        elif zlabel_position == "axis_top":
+            ax.set_zlabel("", fontsize=0, labelpad=0)
+            if domain_min is None or domain_max is None:
+                ax.set_zlabel(zlabel, fontsize=label_size, labelpad=z_label_pad)
+            else:
+                domain_min = np.asarray(domain_min, dtype=float)
+                domain_max = np.asarray(domain_max, dtype=float)
+                ax.text(
+                    domain_max[0],
+                    domain_min[1],
+                    domain_max[2] + 0.05 * (domain_max[2] - domain_min[2]),
+                    zlabel,
+                    fontsize=label_size,
+                    ha="center",
+                    va="bottom",
+                )
+        else:
+            ax.set_zlabel(zlabel, fontsize=label_size, labelpad=z_label_pad)
+        ax.tick_params(axis="z", which="major", labelsize=tick_size, pad=z_tick_pad)
+        _set_compact_axis_ticks(ax.zaxis, ax.set_zticks, z_ticks, hide_z_endpoints, hide_first=hide_z_first)
     else:
         ax.tick_params(axis="z", which="major", labelsize=0, pad=6)
         ax.set_zlabel("", fontsize=0, labelpad=0)
@@ -1305,6 +1431,9 @@ def _plot_s_view(
     colorbar_label=r"$S^{(0)}$",
     cmap="viridis",
     show_grid=True,
+    x_tick_pad=8,
+    y_tick_pad=8,
+    z_tick_pad=8,
 ):
     norm = plt.Normalize(vmin=np.min(s_values), vmax=np.max(s_values))
     norm_s = plt.Normalize(vmin=np.min(s_values), vmax=np.max(s_values))
@@ -1337,12 +1466,17 @@ def _plot_s_view(
     _apply_3d_axis_style(
         ax,
         noaxis,
+        domain_min=domain_min,
+        domain_max=domain_max,
         x_ticks=x_ticks,
         y_ticks=y_ticks,
         z_ticks=z_ticks,
         xlabel=xlabel,
         ylabel=ylabel,
         zlabel=zlabel,
+        x_tick_pad=x_tick_pad,
+        y_tick_pad=y_tick_pad,
+        z_tick_pad=z_tick_pad,
     )
     ax.dist = 10
 
@@ -1411,7 +1545,26 @@ def _plot_surface_only_view(
     colorbar_label=r"$S^{(0)}$",
     cmap="viridis",
     show_grid=True,
+    x_tick_pad=8,
+    y_tick_pad=8,
+    z_tick_pad=8,
+    x_label_pad=15,
+    y_label_pad=20,
+    z_label_pad=15,
+    surface_stride=1,
+    zlabel_position="default",
+    show_colorbar=True,
+    axis_label_size=30,
+    axis_tick_size=20,
+    hide_duplicate_corner_ticks=False,
+    surface_rasterized=False,
 ):
+    surface_stride = max(1, int(surface_stride))
+    if surface_stride > 1:
+        surface_volume = surface_volume[::surface_stride, ::surface_stride, ::surface_stride]
+        if surface_color_values is not None:
+            surface_color_values = surface_color_values[::surface_stride, ::surface_stride, ::surface_stride]
+
     fig = plt.figure(figsize=(10, 10))
     ax = fig.add_subplot(111, projection="3d", facecolor="white")
     ax.set_position([0.02, 0.02, 0.80, 0.96])
@@ -1456,21 +1609,34 @@ def _plot_surface_only_view(
         ax=ax,
         scalar_field=surface_color_values,
         cmap=cmap,
-        show_colorbar=True,
+        show_colorbar=show_colorbar,
         colorbar_ticks=colorbar_ticks,
         colorbar_label=colorbar_label,
+        rasterized=surface_rasterized,
     )
 
     # _plot_center_markers(ax, center, noaxis, domain_min, domain_max, layout)
     _apply_3d_axis_style(
         ax,
         noaxis,
+        domain_min=domain_min,
+        domain_max=domain_max,
         x_ticks=x_ticks,
         y_ticks=y_ticks,
         z_ticks=z_ticks,
         xlabel=xlabel,
         ylabel=ylabel,
         zlabel=zlabel,
+        tick_size=axis_tick_size,
+        label_size=axis_label_size,
+        x_tick_pad=x_tick_pad,
+        y_tick_pad=y_tick_pad,
+        z_tick_pad=z_tick_pad,
+        x_label_pad=x_label_pad,
+        y_label_pad=y_label_pad,
+        z_label_pad=z_label_pad,
+        zlabel_position=zlabel_position,
+        hide_duplicate_corner_ticks=hide_duplicate_corner_ticks,
     )
 
     plt.savefig(full_output_path, dpi=dpi, bbox_inches="tight", pad_inches=0.02)
@@ -1504,6 +1670,19 @@ def filter_q_3d(
     colorbar_label=r"$S^{(0)}$",
     cmap="viridis",
     show_grid=True,
+    x_tick_pad=8,
+    y_tick_pad=8,
+    z_tick_pad=8,
+    x_label_pad=15,
+    y_label_pad=20,
+    z_label_pad=15,
+    surface_stride=1,
+    zlabel_position="default",
+    show_colorbar=True,
+    axis_label_size=30,
+    axis_tick_size=20,
+    hide_duplicate_corner_ticks=False,
+    surface_rasterized=False,
 ):
     if dpi is None:
         dpi = 300
@@ -1512,7 +1691,7 @@ def filter_q_3d(
 
     if output_directory and not os.path.exists(output_directory):
         os.makedirs(output_directory)
-    full_output_path = os.path.join(output_directory, output_filename)
+    full_output_path = _resolve_output_path(output_directory, output_filename)
 
     layout = _infer_layout(domain_min, domain_max, layout)
     shape_3d = grad.shape
@@ -1572,6 +1751,19 @@ def filter_q_3d(
                 colorbar_label=colorbar_label,
                 cmap=cmap,
                 show_grid=show_grid,
+                x_tick_pad=x_tick_pad,
+                y_tick_pad=y_tick_pad,
+                z_tick_pad=z_tick_pad,
+                x_label_pad=x_label_pad,
+                y_label_pad=y_label_pad,
+                z_label_pad=z_label_pad,
+                surface_stride=surface_stride,
+                zlabel_position=zlabel_position,
+                show_colorbar=show_colorbar,
+                axis_label_size=axis_label_size,
+                axis_tick_size=axis_tick_size,
+                hide_duplicate_corner_ticks=hide_duplicate_corner_ticks,
+                surface_rasterized=surface_rasterized,
             )
         else:
             _plot_s_view(
@@ -1598,6 +1790,9 @@ def filter_q_3d(
                 colorbar_label=colorbar_label,
                 cmap=cmap,
                 show_grid=show_grid,
+                x_tick_pad=x_tick_pad,
+                y_tick_pad=y_tick_pad,
+                z_tick_pad=z_tick_pad,
             )
 
     return (
