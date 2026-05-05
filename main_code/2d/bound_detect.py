@@ -705,7 +705,7 @@ def detect_shape(
     debug_plot_boundary_points=False,
     residual_threshold=0.05,
     t_aspect_ratio=1.2,
-    t_cv=0.7,
+    t_cv=0.5,
 ):
     segmented_results = _cluster_points(grad, X, Y, para_abs, para_grad, eps, mini_samples, S_num, eps_mode=eps_mode)
     raw_cluster_count = len(segmented_results)
@@ -946,6 +946,13 @@ def detect_shape(
 
     ax.set_xlim(tau_x_min, tau_x_max)
     ax.set_ylim(tau_y_min, tau_y_max)
+
+    ax.set_xticks(np.linspace(tau_x_min, tau_x_max, 5))
+    ax.set_yticks(np.linspace(tau_y_min, tau_y_max, 5))
+
+    ax.xaxis.set_major_formatter(FuncFormatter(lambda x, _: f"{x:g}"))
+    ax.yaxis.set_major_formatter(FuncFormatter(lambda x, _: f"{x:g}"))
+    ax.tick_params(axis="both", labelsize=20)
     ax.set_aspect("equal", adjustable="box")
     ax.set_facecolor("white")
 
