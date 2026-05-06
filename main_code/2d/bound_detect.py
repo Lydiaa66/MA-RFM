@@ -612,7 +612,6 @@ def _classify_cluster(cluster_pts, boundary_points, fit_rotation=False, residual
     dists_sorted = np.sort(dists)
     min_dist_to_center = np.min(dists)
     max_dist_to_center = np.max(dists)
-    tori_ratio = min_dist_to_center / max_dist_to_center if max_dist_to_center > 1e-12 else 0.0
     idx_dist_05 = max(0, min(len(dists_sorted) - 1, int(np.floor(0.05 * len(dists_sorted))) - 1))
     idx_dist_95 = max(0, min(len(dists_sorted) - 1, int(np.floor(0.95 * len(dists_sorted))) - 1))
 
@@ -622,22 +621,8 @@ def _classify_cluster(cluster_pts, boundary_points, fit_rotation=False, residual
     elif res_rect <= res_ellip:
         shape_type = "Rectangle"
         final_params = {"center": center, "W": lx, "H": ly}
+
     else:
-        if 0.2 <= tori_ratio <= 0.5:
-            r_min = float(dists_sorted[idx_dist_05])
-            r_max = float(dists_sorted[idx_dist_95])
-            r_tube = 0.5 * (r_max - r_min)
-            r_major = 0.5 * (r_max + r_min)
-            shape_type = "Donut"
-            final_params = {
-                "center": center,
-                "r_min": r_min,
-                "r_max": r_max,
-                "tori_ratio": tori_ratio,
-                "R_major": r_major,
-                "r_minor": r_tube,
-            }
-        else:
             shape_type = "Ellipsoid"
             final_params = {"center": center, "a": lx / 2, "b": ly / 2, "radius": float(dists_sorted[idx_dist_95])}
 
@@ -648,7 +633,6 @@ def _classify_cluster(cluster_pts, boundary_points, fit_rotation=False, residual
         "res_rect": float(res_rect),
         "res_ellip": float(res_ellip),
         "residual_threshold": float(residual_threshold),
-        "tori_ratio": float(tori_ratio),
         "r_mean": float(r_mean),
         "min_dist_to_center": float(min_dist_to_center),
         "max_dist_to_center": float(max_dist_to_center),
@@ -801,8 +785,6 @@ def detect_shape(
         print(f"Cluster {i}: AR={aspect_ratio:.2f}")
         print(f"  Res_Rect={res_rect:.6f} vs Res_Ellip={res_ellip:.6f}")
         print(f"  center=({center[0]:.4f}, {center[1]:.4f})")
-        if shape_type == "Donut":
-            print(f"  Tori ratio={final_params['tori_ratio']:.6f}")
         print(f"  -> Decision: {shape_type} ({basis_func_type})")
 
         results.append(
@@ -818,7 +800,6 @@ def detect_shape(
                 "res_ellip": diagnostics["res_ellip"],
                 "Lx": diagnostics["Lx"],
                 "Ly": diagnostics["Ly"],
-                "tori_ratio": diagnostics["tori_ratio"],
                 "dist_05": diagnostics["dist_05"],
                 "dist_95": diagnostics["dist_95"],
                 "cv": float(cv) if np.isfinite(cv) else np.nan,
