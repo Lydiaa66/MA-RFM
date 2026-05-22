@@ -6,6 +6,8 @@
 /MA_RFM_clean_version/
 /tools/
 /tmp/
+/ARTIFACTS.md
+/ARTIFACTS_MANIFEST.tsv
 
 # Python and notebook cache
 __pycache__/
