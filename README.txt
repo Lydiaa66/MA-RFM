@@ -129,7 +129,10 @@ Some experiment folders include saved arrays, trained model weights, figures, an
 *.pdf/png   generated figures
 ```
 
-These files are included for reproducibility and for quickly regenerating figures without rerunning all expensive computations.
+Large intermediate arrays, model checkpoints, and serialized reconstruction
+objects are not tracked in Git.  They are kept as local artifacts to avoid
+making the GitHub repository too large.  See `ARTIFACTS.md` and
+`ARTIFACTS_MANIFEST.tsv` for the artifact policy and the current local manifest.
 
 ## Reproducibility Notes
 
